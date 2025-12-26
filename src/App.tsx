@@ -53,6 +53,7 @@ function FlowDo() {
   const [showChatSidebar, setShowChatSidebar] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
   const [topicInput, setTopicInput] = useState('');
+  const [flowFile, setFlowFile] = useState<Attachment | null>(null);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(SETTINGS_KEY) || '');
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [isDraggingNode, setIsDraggingNode] = useState<string | null>(null);
@@ -442,8 +443,8 @@ function FlowDo() {
   }, [nodes, apiKey, setAiMenu, setIsAiLoading, setNodes, setEdges]);
 
   const handleGenerateFlow = useCallback(async () => {
-    if (!topicInput.trim()) {
-      alert('Please enter a topic');
+    if (!topicInput.trim() && !flowFile) {
+      alert('Please enter a topic or upload a file');
       return;
     }
     
@@ -451,7 +452,9 @@ function FlowDo() {
     setIsAiLoading(true);
     
     try {
-      const steps = await generateAIContent('flow', topicInput, apiKey);
+      // Use topicInput if provided, otherwise use file name
+      const prompt = topicInput.trim() || (flowFile ? flowFile.name : '');
+      const steps = await generateAIContent('flow', prompt, apiKey, flowFile);
       console.log('Generated steps:', steps);
       
       if (!Array.isArray(steps)) {
@@ -550,8 +553,9 @@ function FlowDo() {
     } finally {
       setIsAiLoading(false);
       setTopicInput('');
+      setFlowFile(null);
     }
-  }, [topicInput, apiKey, viewport, showChatSidebar, setShowTopicModal, setIsAiLoading, setNodes, setEdges, setGroups, setTopicInput]);
+  }, [topicInput, flowFile, apiKey, viewport, showChatSidebar, setShowTopicModal, setIsAiLoading, setNodes, setEdges, setGroups, setTopicInput]);
 
   // Chat handler
   const handleChatQuery = useCallback(async (query: string, visibleNodesContext: string): Promise<string> => {
@@ -675,8 +679,43 @@ function FlowDo() {
         topicInput={topicInput}
         onTopicInputChange={setTopicInput}
         onGenerate={handleGenerateFlow}
-        onClose={() => setShowTopicModal(false)}
+        onClose={() => {
+          setShowTopicModal(false);
+          setFlowFile(null);
+          setTopicInput('');
+        }}
         isLoading={isAiLoading}
+        selectedFile={flowFile}
+        onFileSelect={setFlowFile}
+        onFileChange={async (e: React.ChangeEvent<HTMLInputElement>) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+
+          try {
+            // Check file type
+            if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+              const content = await fileToText(file);
+              setFlowFile({
+                id: Date.now(),
+                name: file.name,
+                type: 'file',
+                fileType: 'text',
+                content
+              });
+            } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+              // For PDF, we'll need to extract text (basic approach - you might want to use a PDF library)
+              alert('PDF support: Please convert PDF to text first, or use a text file. PDF text extraction requires additional libraries.');
+              e.target.value = '';
+            } else {
+              alert('Unsupported file type. Please use .txt, .md, or .pdf files.');
+              e.target.value = '';
+            }
+          } catch (error) {
+            alert(`Error reading file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            e.target.value = '';
+            setFlowFile(null);
+          }
+        }}
       />
 
       <LoadingOverlay isVisible={isAiLoading} />

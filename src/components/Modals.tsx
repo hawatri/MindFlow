@@ -1,5 +1,6 @@
-import React from 'react';
-import { Settings, BookOpen, Wand2, Sparkles } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Settings, BookOpen, Wand2, Sparkles, Upload, X, FileText } from 'lucide-react';
+import type { Attachment } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -60,6 +61,9 @@ interface TopicModalProps {
   onGenerate: () => void;
   onClose: () => void;
   isLoading: boolean;
+  selectedFile: Attachment | null;
+  onFileSelect: (file: Attachment | null) => void;
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 }
 
 export const TopicModal: React.FC<TopicModalProps> = ({
@@ -68,9 +72,25 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   onTopicInputChange,
   onGenerate,
   onClose,
-  isLoading
+  isLoading,
+  selectedFile,
+  onFileSelect,
+  onFileChange
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileRemove = () => {
+    onFileSelect(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm">
@@ -78,12 +98,49 @@ export const TopicModal: React.FC<TopicModalProps> = ({
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-purple-400">
           <BookOpen className="w-5 h-5" /> Create Study Plan
         </h2>
-        <textarea 
-          className="w-full bg-zinc-800 border border-zinc-700 rounded p-3 text-sm focus:outline-none focus:border-purple-500 min-h-[80px]" 
-          placeholder="Topic..." 
-          value={topicInput} 
-          onChange={(e) => onTopicInputChange(e.target.value)} 
-        />
+        
+        <div className="mb-3">
+          <label className="block text-sm text-zinc-400 mb-2">Topic (optional if file uploaded)</label>
+          <textarea 
+            className="w-full bg-zinc-800 border border-zinc-700 rounded p-3 text-sm focus:outline-none focus:border-purple-500 min-h-[80px]" 
+            placeholder="Enter topic or upload a file..." 
+            value={topicInput} 
+            onChange={(e) => onTopicInputChange(e.target.value)} 
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm text-zinc-400 mb-2">Upload File (PDF, TXT, MD)</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.md,.doc,.docx"
+            onChange={onFileChange}
+            className="hidden"
+          />
+          
+          {selectedFile ? (
+            <div className="flex items-center gap-2 p-2 bg-zinc-800 border border-zinc-700 rounded">
+              <FileText size={16} className="text-purple-400" />
+              <span className="flex-1 text-sm text-zinc-300 truncate">{selectedFile.name}</span>
+              <button
+                onClick={handleFileRemove}
+                className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-red-400"
+                title="Remove file"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleFileClick}
+              className="w-full p-3 bg-zinc-800 border border-zinc-700 rounded hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2 text-sm text-zinc-300"
+            >
+              <Upload size={16} /> Choose File
+            </button>
+          )}
+        </div>
+
         <div className="flex justify-end gap-2 mt-4">
           <button 
             onClick={onClose} 
@@ -93,8 +150,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
           </button>
           <button 
             onClick={onGenerate} 
-            disabled={!topicInput.trim()} 
-            className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded font-medium flex items-center gap-2"
+            disabled={(!topicInput.trim() && !selectedFile) || isLoading} 
+            className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded font-medium flex items-center gap-2"
           >
             {isLoading ? 'Generating...' : 'Generate'} <Wand2 size={14}/>
           </button>

@@ -56,7 +56,12 @@ Return a JSON object with the following structure:
 
 Return ONLY valid JSON, no markdown, no code blocks.`;
     } else if (mode === 'flow') {
-      userPrompt = `Create a structured study plan for: "${prompt}". Return a JSON object with a "steps" array (id, title, type, description, dependsOn). Create 5 steps. No markdown.`;
+      userPrompt = `Create a structured study plan based on this content: "${prompt}"${contextMessage}
+
+Return a JSON object with a "steps" array (id, title, type, description, dependsOn). 
+Analyze the content to create relevant, logical steps that build upon each other. 
+Create 5-8 steps that break down the topic into learnable chunks. 
+No markdown, return ONLY valid JSON.`;
     } else {
       userPrompt = `Generate 3 related sub-topics or tasks for: "${prompt}"${contextMessage}. Return ONLY a JSON array of strings. No markdown.`;
     }
