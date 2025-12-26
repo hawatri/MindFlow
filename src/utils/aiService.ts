@@ -1,12 +1,12 @@
 import { MOCK_AI_RESPONSES } from '../constants';
-import type { Attachment } from '../types';
+import type { Attachment, AIStructuredResponse } from '../types';
 
 export const generateAIContent = async (
   mode: string,
   prompt: string,
   apiKey: string,
   attachment: Attachment | null = null
-): Promise<any> => {
+): Promise<any | AIStructuredResponse> => {
   if (!apiKey || apiKey === 'demo') {
     await new Promise(r => setTimeout(r, 1000));
     if (mode === 'explain') return MOCK_AI_RESPONSES.explain;
@@ -32,11 +32,29 @@ export const generateAIContent = async (
     }
 
     if (mode === 'explain') {
-      userPrompt = `Explain the concept or content found here clearly: "${prompt}"${contextMessage}`;
+      userPrompt = `Analyze and explain the concept or content found here: "${prompt}"${contextMessage}
+
+Return a JSON object with the following structure:
+{
+  "summary": "A clear, concise summary (2-3 sentences)",
+  "key_points": ["Key point 1", "Key point 2", "Key point 3", ...],
+  "suggested_next_steps": ["Step 1", "Step 2", ...] (optional)
+}
+
+Return ONLY valid JSON, no markdown, no code blocks.`;
     } else if (mode === 'quiz') {
       userPrompt = `Generate 3 short quiz questions (with answers in parentheses) based on this content: "${prompt}"${contextMessage}. Return ONLY a JSON array of strings.`;
     } else if (mode === 'enhance') {
-      userPrompt = `Rewrite, improve, and expand upon this content: "${prompt}"${contextMessage}`;
+      userPrompt = `Analyze and enhance the content found here: "${prompt}"${contextMessage}
+
+Return a JSON object with the following structure:
+{
+  "summary": "An improved, expanded summary of the content",
+  "key_points": ["Enhanced key point 1", "Enhanced key point 2", ...],
+  "suggested_next_steps": ["Recommended action 1", "Recommended action 2", ...] (optional)
+}
+
+Return ONLY valid JSON, no markdown, no code blocks.`;
     } else if (mode === 'flow') {
       userPrompt = `Create a structured study plan for: "${prompt}". Return a JSON object with a "steps" array (id, title, type, description, dependsOn). Create 5 steps. No markdown.`;
     } else {
@@ -69,7 +87,34 @@ export const generateAIContent = async (
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
-    if (mode === 'explain' || mode === 'enhance') return text;
+    // Handle structured output for explain and enhance modes
+    if (mode === 'explain' || mode === 'enhance') {
+      try {
+        // Try to parse as JSON first
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const json = JSON.parse(cleanText);
+        
+        // Validate structured response format
+        if (json.summary && Array.isArray(json.key_points)) {
+          return json as AIStructuredResponse;
+        }
+        
+        // Fallback: if JSON doesn't match structure, wrap it
+        return {
+          summary: json.summary || text,
+          key_points: json.key_points || (typeof json === 'string' ? [json] : []),
+          suggested_next_steps: json.suggested_next_steps || undefined
+        } as AIStructuredResponse;
+      } catch (e) {
+        // If parsing fails, treat as plain text and wrap it
+        console.warn("JSON parse error, falling back to text", e);
+        return {
+          summary: text,
+          key_points: text.split('\n').filter(l => l.trim().length > 0).slice(0, 5),
+          suggested_next_steps: undefined
+        } as AIStructuredResponse;
+      }
+    }
 
     try {
       const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();

@@ -152,30 +152,34 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute right-0 top-0 bottom-0 w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col z-50 shadow-2xl">
+    <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-b from-zinc-900 to-zinc-950 border-l border-zinc-800 flex flex-col z-50 shadow-2xl shadow-indigo-500/10">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950">
+      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-950/90 to-zinc-900/90 backdrop-blur-sm">
         <div className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-indigo-400" />
-          <h2 className="text-lg font-semibold text-white">Chat with your Flow</h2>
+          <div className="p-2 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-lg">
+            <MessageSquare className="w-5 h-5 text-indigo-400" />
+          </div>
+          <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Chat with your Flow</h2>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-white transition-colors"
+          className="p-1.5 hover:bg-zinc-800/50 rounded-md text-zinc-400 hover:text-white transition-all duration-200 hover:scale-110"
         >
           <X size={18} />
         </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-zinc-950/30 to-zinc-900/50">
         {messages.length === 0 ? (
           <div className="text-center text-zinc-500 mt-8 px-4">
-            <MessageSquare className="w-12 h-12 mx-auto mb-3 text-zinc-700" />
-            <p className="text-sm">
+            <div className="p-3 bg-gradient-to-r from-indigo-600/10 to-purple-600/10 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+              <MessageSquare className="w-8 h-8 text-indigo-500" />
+            </div>
+            <p className="text-sm text-zinc-400 mb-2">
               Ask questions about the nodes currently visible on your canvas.
             </p>
-            <p className="text-xs mt-2 text-zinc-600">
+            <p className="text-xs text-zinc-600 bg-zinc-800/50 rounded-lg p-3">
               Example: "What is the relationship between Newton's First Law and the Quiz?"
             </p>
           </div>
@@ -186,10 +190,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                className={`max-w-[80%] rounded-2xl px-4 py-3 transition-all duration-300 ${
                   msg.role === 'user'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-zinc-800 text-zinc-200'
+                    ? 'bg-gradient-to-r from-indigo-600/30 to-purple-600/30 text-white border border-indigo-500/30 shadow-lg shadow-indigo-500/10'
+                    : 'bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 text-zinc-200 border border-zinc-700/50 shadow-lg shadow-zinc-900/20'
                 }`}
               >
                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -199,7 +203,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         )}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-zinc-800 rounded-lg px-4 py-2 flex items-center gap-2">
+            <div className="bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-2xl px-4 py-3 flex items-center gap-2 border border-zinc-700/50 shadow-lg shadow-zinc-900/20">
               <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
               <span className="text-sm text-zinc-400">Thinking...</span>
             </div>
@@ -209,9 +213,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-zinc-800 bg-zinc-950">
+      <div className="p-4 border-t border-zinc-800 bg-gradient-to-r from-zinc-950/90 to-zinc-900/90 backdrop-blur-sm">
         {!apiKey && (
-          <div className="mb-2 p-2 bg-yellow-900/20 border border-yellow-800/50 rounded text-xs text-yellow-400">
+          <div className="mb-2 p-2 bg-gradient-to-r from-yellow-900/20 to-amber-900/20 border border-yellow-800/50 rounded text-xs text-yellow-400 backdrop-blur-sm">
             Please set your API key in Settings to use chat.
           </div>
         )}
@@ -223,13 +227,13 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             onKeyDown={handleKeyDown}
             placeholder="Ask about your flow..."
             disabled={isLoading || !apiKey}
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm transition-all duration-200"
             rows={2}
           />
           <button
             onClick={handleSend}
             disabled={isLoading || !inputValue.trim() || !apiKey}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+            className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30"
           >
             {isLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -238,7 +242,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             )}
           </button>
         </div>
-        <p className="text-xs text-zinc-500 mt-2">
+        <p className="text-xs text-zinc-500 mt-2 flex items-center gap-1">
+          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"></div>
           {getVisibleNodes().length} node{getVisibleNodes().length !== 1 ? 's' : ''} visible
         </p>
       </div>

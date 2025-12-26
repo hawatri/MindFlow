@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare 
+  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare, Wand2, Maximize2 
 } from 'lucide-react';
 
 // Components
@@ -10,6 +10,7 @@ import { NodeGroup } from './components/NodeGroup';
 import { ContextMenuComponent, AIMenuComponent } from './components/ContextMenus';
 import { SettingsModal, TopicModal, LoadingOverlay } from './components/Modals';
 import { ChatSidebar } from './components/ChatSidebar';
+import { Minimap } from './components/Minimap';
 
 // Hooks
 import { useCanvasInteractions } from './hooks/useCanvasInteractions';
@@ -18,6 +19,7 @@ import { useCanvasInteractions } from './hooks/useCanvasInteractions';
 import { saveStateToDB, loadStateFromDB, clearDB } from './utils/database';
 import { fileToBase64, fileToText, downloadFlow } from './utils/fileHandlers';
 import { generateAIContent, generateChatResponse } from './utils/aiService';
+import { organizeNodesInViewport } from './utils/layout';
 
 // Data
 import { initialNodes, initialEdges, initialGroups } from './data/initialData';
@@ -380,14 +382,14 @@ function FlowDo() {
 
     try {
       if (operation === 'enhance' || operation === 'explain') {
-        const textResult = await generateAIContent(operation, prompt, apiKey, attachment);
+        const structuredResult = await generateAIContent(operation, prompt, apiKey, attachment);
         setNodes(prev => prev.map(n => 
           n.id === nodeId 
             ? { 
                 ...n, 
                 data: { 
                   ...n.data, 
-                  label: n.data.label + (n.data.label ? "\n\n-- AI Insight --\n" : "") + textResult 
+                  aiInsight: structuredResult
                 } 
               } 
             : n
@@ -510,6 +512,70 @@ function FlowDo() {
     return await generateChatResponse(query, visibleNodesContext, apiKey);
   }, [apiKey]);
 
+  // Magic Organize handler
+  const handleMagicOrganize = useCallback(() => {
+    if (nodes.length === 0) {
+      alert('No nodes to organize');
+      return;
+    }
+
+    const canvasWidth = window.innerWidth - (showChatSidebar ? 384 : 0);
+    const canvasHeight = window.innerHeight;
+
+    const organizedNodes = organizeNodesInViewport(
+      nodes,
+      edges,
+      viewport.x,
+      viewport.y,
+      canvasWidth,
+      canvasHeight
+    );
+
+    setNodes(organizedNodes);
+  }, [nodes, edges, viewport, showChatSidebar, setNodes]);
+
+  // Fit to View handler
+  const handleFitToView = useCallback(() => {
+    if (nodes.length === 0) {
+      alert('No nodes to fit');
+      return;
+    }
+
+    const canvasWidth = window.innerWidth - (showChatSidebar ? 384 : 0);
+    const canvasHeight = window.innerHeight;
+
+    // Calculate bounding box of all nodes
+    const minX = Math.min(...nodes.map(n => n.x));
+    const maxX = Math.max(...nodes.map(n => n.x + (n.width || DEFAULT_NODE_WIDTH)));
+    const minY = Math.min(...nodes.map(n => n.y));
+    const maxY = Math.max(...nodes.map(n => n.y + (n.height || DEFAULT_NODE_HEIGHT)));
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Add padding (10% on each side)
+    const padding = 0.1;
+    const paddedWidth = contentWidth * (1 + padding * 2);
+    const paddedHeight = contentHeight * (1 + padding * 2);
+
+    // Calculate zoom to fit
+    const zoomX = canvasWidth / paddedWidth;
+    const zoomY = canvasHeight / paddedHeight;
+    const newZoom = Math.min(zoomX, zoomY, 1); // Don't zoom in beyond 1x
+
+    // Center the content in viewport
+    const newX = -(centerX * newZoom - canvasWidth / 2);
+    const newY = -(centerY * newZoom - canvasHeight / 2);
+
+    setViewport({
+      x: newX,
+      y: newY,
+      zoom: newZoom
+    });
+  }, [nodes, showChatSidebar, setViewport]);
+
   // Settings
   const saveSettings = useCallback(() => {
     localStorage.setItem(SETTINGS_KEY, apiKey);
@@ -578,6 +644,13 @@ function FlowDo() {
         }`}>
           {saveStatus === 'saving' ? 'Saving...' : (saveStatus === 'error' ? 'Error!' : 'Saved')}
         </div>
+        <button 
+          onClick={handleMagicOrganize} 
+          className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 hover:from-purple-600/40 hover:to-pink-600/40 text-purple-300 border border-purple-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
+          title="Automatically organize all nodes into a clean hierarchical layout"
+        >
+          <Wand2 size={14} /> Magic Organize
+        </button>
         <button 
           onClick={() => setShowChatSidebar(!showChatSidebar)} 
           className={`${showChatSidebar ? 'bg-indigo-600/40 hover:bg-indigo-600/60' : 'bg-indigo-600/20 hover:bg-indigo-600/40'} text-indigo-300 border border-indigo-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2`}
@@ -727,6 +800,17 @@ function FlowDo() {
         viewport={viewport}
         apiKey={apiKey}
         onChatQuery={handleChatQuery}
+      />
+
+      {/* Minimap */}
+      <Minimap
+        nodes={nodes}
+        edges={edges}
+        viewport={viewport}
+        onViewportChange={setViewport}
+        canvasWidth={window.innerWidth - (showChatSidebar ? 384 : 0)}
+        canvasHeight={window.innerHeight}
+        sidebarOpen={showChatSidebar}
       />
     </div>
   );

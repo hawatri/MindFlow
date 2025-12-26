@@ -2,11 +2,11 @@ import React from 'react';
 import { 
   CheckCircle, Circle, X, Trash2, Lock, Paperclip, 
   Presentation, Lightbulb, HelpCircle, FileText, 
-  Link as LinkIcon, Sparkles, GripHorizontal, Calendar, 
-  AlertTriangle, Flag, Map, Trophy, Eye, Bookmark 
+  Link as LinkIcon, Sparkles, GripHorizontal 
 } from 'lucide-react';
 import { COLORS, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
 import type { Node, Attachment } from '../types';
+import { AIInsight } from './AIInsight';
 
 interface FlowNodeProps {
   node: Node;
@@ -49,10 +49,6 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
   if (node.type === 'summary') headerColor = COLORS.nodeHeaderSummary;
   if (node.type === 'resource') headerColor = COLORS.nodeHeaderResource;
   if (node.type === 'idea') headerColor = COLORS.nodeHeaderIdea;
-  if (node.type === 'mindmap') headerColor = COLORS.nodeHeaderMindMap;
-  if (node.type === 'milestone') headerColor = COLORS.nodeHeaderMilestone;
-  if (node.type === 'insight') headerColor = COLORS.nodeHeaderInsight;
-  if (node.type === 'reference') headerColor = COLORS.nodeHeaderResource;
 
   const getNodeIcon = () => {
     switch (node.type) {
@@ -60,16 +56,6 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
       case 'concept': return <Lightbulb size={12} />;
       case 'question': return <HelpCircle size={12} />;
       case 'summary': return <FileText size={12} />;
-      case 'mindmap': return <Map size={12} />;
-      case 'milestone': return <Trophy size={12} />;
-      case 'insight': return <Eye size={12} />;
-      case 'reference': return <Bookmark size={12} />;
-      case 'event': return <Calendar size={12} />;
-      case 'task': return <CheckCircle size={12} />;
-      case 'goal': return <Flag size={12} />;
-      case 'idea': return <Lightbulb size={12} />;
-      case 'note': return <FileText size={12} />;
-      case 'resource': return <Bookmark size={12} />;
       default: return <CheckCircle size={12} />;
     }
   };
@@ -165,6 +151,11 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
             placeholder="Notes..." 
             onMouseDown={(e) => e.stopPropagation()} 
           />
+
+          {/* AI Insight */}
+          {node.data.aiInsight && (
+            <AIInsight insight={node.data.aiInsight} />
+          )}
 
           {/* Attachments */}
           <div className="flex flex-col gap-1 mb-1 max-h-[120px] overflow-y-auto pr-1">
