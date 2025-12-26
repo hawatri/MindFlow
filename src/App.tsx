@@ -158,17 +158,28 @@ function FlowDo() {
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (e.button === 0) {
+      const node = nodes.find(n => n.id === id);
+      // Don't allow dragging if node is pinned
+      if (node?.pinned) {
+        setSelection(id);
+        return;
+      }
       setIsDraggingNode(id);
       setDragStart({ x: e.clientX, y: e.clientY });
       setSelection(id);
       setContextMenu(null);
       setAiMenu(null);
     }
-  }, [setIsDraggingNode, setDragStart, setSelection, setContextMenu, setAiMenu]);
+  }, [nodes, setIsDraggingNode, setDragStart, setSelection, setContextMenu, setAiMenu]);
 
   const handleGroupMouseDown = useCallback((e: React.MouseEvent, group: Group) => {
     e.stopPropagation();
     if (e.button === 0) {
+      // Don't allow dragging if group is pinned
+      if (group.pinned) {
+        setSelection(group.id);
+        return;
+      }
       const capturedNodes = nodes.filter(n => isNodeInGroup(n, group)).map(n => n.id);
       setIsDraggingGroup({ id: group.id, capturedNodes });
       setDragStart({ x: e.clientX, y: e.clientY });
@@ -182,16 +193,27 @@ function FlowDo() {
     e.stopPropagation();
     e.preventDefault();
     if (e.button === 0) {
+      // Don't allow resizing if pinned
       if (type === 'node') {
+        const node = nodes.find(n => n.id === id);
+        if (node?.pinned) {
+          setSelection(id);
+          return;
+        }
         setIsResizingNode(id);
       } else {
+        const group = groups.find(g => g.id === id);
+        if (group?.pinned) {
+          setSelection(id);
+          return;
+        }
         setIsResizingGroup(id);
       }
       setDragStart({ x: e.clientX, y: e.clientY });
       setSelection(id);
       setContextMenu(null);
     }
-  }, [setIsResizingNode, setIsResizingGroup, setDragStart, setSelection, setContextMenu]);
+  }, [nodes, groups, setIsResizingNode, setIsResizingGroup, setDragStart, setSelection, setContextMenu]);
 
   const handlePinMouseDown = useCallback((e: React.MouseEvent, nodeId: string, _type: string) => {
     e.stopPropagation();
@@ -226,6 +248,30 @@ function FlowDo() {
       y: e.clientY,
       type: 'edge',
       targetId: edgeId
+    });
+    setAiMenu(null);
+  }, [setSelection, setContextMenu, setAiMenu]);
+
+  const handleNodeContextMenu = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.preventDefault();
+    setSelection(nodeId);
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'node',
+      targetId: nodeId
+    });
+    setAiMenu(null);
+  }, [setSelection, setContextMenu, setAiMenu]);
+
+  const handleGroupContextMenu = useCallback((e: React.MouseEvent, groupId: string) => {
+    e.preventDefault();
+    setSelection(groupId);
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'group',
+      targetId: groupId
     });
     setAiMenu(null);
   }, [setSelection, setContextMenu, setAiMenu]);
@@ -290,6 +336,20 @@ function FlowDo() {
   const updateGroup = useCallback((id: string, updates: Partial<Group>) => {
     setGroups(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
   }, [setGroups]);
+
+  const togglePinNode = useCallback((id: string) => {
+    setNodes(prev => prev.map(n => 
+      n.id === id ? { ...n, pinned: !n.pinned } : n
+    ));
+    setContextMenu(null);
+  }, [setNodes, setContextMenu]);
+
+  const togglePinGroup = useCallback((id: string) => {
+    setGroups(prev => prev.map(g => 
+      g.id === id ? { ...g, pinned: !g.pinned } : g
+    ));
+    setContextMenu(null);
+  }, [setGroups, setContextMenu]);
 
   const deleteAttachment = useCallback((nodeId: string, attachmentId: number) => {
     setNodes(prev => prev.map(n => 
@@ -818,6 +878,7 @@ function FlowDo() {
               onResizeMouseDown={(e, id) => handleResizeMouseDown(e, id, 'group')}
               onUpdateGroup={updateGroup}
               onDeleteGroup={deleteGroup}
+              onContextMenu={handleGroupContextMenu}
             />
           ))}
 
@@ -877,6 +938,7 @@ function FlowDo() {
                 e.stopPropagation();
                 setAiMenu({ nodeId, x: e.clientX, y: e.clientY });
               }}
+              onContextMenu={handleNodeContextMenu}
             />
           ))}
         </div>
@@ -889,6 +951,14 @@ function FlowDo() {
           onAddNode={addNode}
           onAddGroup={addGroup}
           onDeleteEdge={deleteEdge}
+          onTogglePinNode={togglePinNode}
+          onTogglePinGroup={togglePinGroup}
+          selectedNode={contextMenu.type === 'node' && contextMenu.targetId 
+            ? nodes.find(n => n.id === contextMenu.targetId) || null 
+            : null}
+          selectedGroup={contextMenu.type === 'group' && contextMenu.targetId 
+            ? groups.find(g => g.id === contextMenu.targetId) || null 
+            : null}
         />
       )}
 

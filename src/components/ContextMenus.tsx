@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   CheckCircle, Unplug, Presentation, Lightbulb, HelpCircle, 
   FileText, FolderOpen, BoxSelect, Sparkles, GraduationCap, 
-  Zap 
+  Zap, Pin, PinOff
 } from 'lucide-react';
 import type { ContextMenu, AIMenu } from '../types';
 
@@ -11,14 +11,26 @@ interface ContextMenuProps {
   onAddNode: (type: string) => void;
   onAddGroup: () => void;
   onDeleteEdge: (id: string) => void;
+  onTogglePinNode?: (id: string) => void;
+  onTogglePinGroup?: (id: string) => void;
+  selectedNode?: { id: string; pinned?: boolean } | null;
+  selectedGroup?: { id: string; pinned?: boolean } | null;
 }
 
 export const ContextMenuComponent: React.FC<ContextMenuProps> = ({
   contextMenu,
   onAddNode,
   onAddGroup,
-  onDeleteEdge
+  onDeleteEdge,
+  onTogglePinNode,
+  onTogglePinGroup,
+  selectedNode,
+  selectedGroup
 }) => {
+  const isNodeMenu = contextMenu.type === 'node' && contextMenu.targetId;
+  const isGroupMenu = contextMenu.type === 'group' && contextMenu.targetId;
+  const isPinned = isNodeMenu ? selectedNode?.pinned : (isGroupMenu ? selectedGroup?.pinned : false);
+
   return (
     <div 
       className="fixed bg-zinc-900 border border-zinc-700 shadow-2xl rounded-lg p-1 min-w-[160px] z-[60] flex flex-col gap-1 text-sm text-zinc-300 animate-in fade-in zoom-in duration-100" 
@@ -32,6 +44,31 @@ export const ContextMenuComponent: React.FC<ContextMenuProps> = ({
         >
           <Unplug size={14} /> Disconnect
         </button>
+      ) : isNodeMenu || isGroupMenu ? (
+        <>
+          {(onTogglePinNode || onTogglePinGroup) && (
+            <button 
+              onClick={() => {
+                if (isNodeMenu && onTogglePinNode) {
+                  onTogglePinNode(contextMenu.targetId!);
+                } else if (isGroupMenu && onTogglePinGroup) {
+                  onTogglePinGroup(contextMenu.targetId!);
+                }
+              }}
+              className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded text-left"
+            >
+              {isPinned ? (
+                <>
+                  <PinOff size={14} className="text-amber-500" /> Unpin
+                </>
+              ) : (
+                <>
+                  <Pin size={14} className="text-amber-500" /> Pin
+                </>
+              )}
+            </button>
+          )}
+        </>
       ) : (
         <>
           <div className="px-2 py-1 text-xs text-zinc-500 font-semibold uppercase tracking-wider">Learning</div>

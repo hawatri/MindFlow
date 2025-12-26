@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   CheckCircle, Circle, X, Trash2, Lock, Paperclip, 
   Presentation, Lightbulb, HelpCircle, FileText, 
-  Link as LinkIcon, Sparkles, GripHorizontal 
+  Link as LinkIcon, Sparkles, GripHorizontal, Pin
 } from 'lucide-react';
 import { COLORS, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
 import type { Node, Attachment } from '../types';
@@ -22,6 +22,7 @@ interface FlowNodeProps {
   onAttachClick: (nodeId: string) => void;
   onAddLink: (nodeId: string) => void;
   onAIClick: (e: React.MouseEvent, nodeId: string) => void;
+  onContextMenu?: (e: React.MouseEvent, nodeId: string) => void;
 }
 
 export const FlowNode: React.FC<FlowNodeProps> = ({
@@ -37,7 +38,8 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
   onDeleteAttachment,
   onAttachClick,
   onAddLink,
-  onAIClick
+  onAIClick,
+  onContextMenu
 }) => {
   let headerColor = COLORS.nodeHeaderTask;
   
@@ -81,13 +83,19 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
         width: node.width || DEFAULT_NODE_WIDTH, 
         height: node.height || DEFAULT_NODE_HEIGHT, 
         backgroundColor: 'rgba(20, 20, 20, 0.95)', 
-        borderColor: isSelected ? '#3b82f6' : (isLocked ? '#7f1d1d' : '#333'), 
+        borderColor: isSelected ? '#3b82f6' : (isLocked ? '#7f1d1d' : node.pinned ? '#f59e0b' : '#333'), 
         borderWidth: isSelected ? '2px' : '1px', 
         opacity: isLocked ? 0.6 : 1, 
         backdropFilter: 'blur(8px)', 
         zIndex: 20 
       }} 
       onMouseDown={(e) => onMouseDown(e, node.id)}
+      onContextMenu={(e) => {
+        if (onContextMenu) {
+          e.stopPropagation();
+          onContextMenu(e, node.id);
+        }
+      }}
     >
       {/* Header */}
       <div 
@@ -100,6 +108,9 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
         <span className="flex items-center gap-2">
           {getNodeIcon()}
           {node.title}
+          {node.pinned && (
+            <Pin size={12} className="text-amber-500" fill="currentColor" />
+          )}
         </span>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button 
@@ -269,12 +280,14 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
         </div>
 
         {/* Resize Handle */}
-        <div 
-          className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center text-zinc-600 hover:text-zinc-400 z-20" 
-          onMouseDown={(e) => onResizeMouseDown(e, node.id)}
-        >
-          <GripHorizontal size={14} className="rotate-45" />
-        </div>
+        {!node.pinned && (
+          <div 
+            className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center text-zinc-600 hover:text-zinc-400 z-20" 
+            onMouseDown={(e) => onResizeMouseDown(e, node.id)}
+          >
+            <GripHorizontal size={14} className="rotate-45" />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ export interface Node {
   width: number;
   height: number;
   completed: boolean;
+  pinned?: boolean;
   data: {
     label: string;
     attachments: Attachment[];
@@ -34,6 +35,7 @@ export interface Group {
   width: number;
   height: number;
   color: string;
+  pinned?: boolean;
 }
 
 export interface Attachment {
@@ -56,7 +58,7 @@ export interface ContextMenu {
   y: number;
   viewportX?: number;
   viewportY?: number;
-  type: 'canvas' | 'edge' | 'node';
+  type: 'canvas' | 'edge' | 'node' | 'group';
   targetId?: string;
 }
 
