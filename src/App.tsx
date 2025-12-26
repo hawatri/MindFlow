@@ -11,6 +11,7 @@ import { ContextMenuComponent, AIMenuComponent } from './components/ContextMenus
 import { SettingsModal, TopicModal, LoadingOverlay } from './components/Modals';
 import { ChatSidebar } from './components/ChatSidebar';
 import { Minimap } from './components/Minimap';
+import { ZoomControls } from './components/ZoomControls';
 
 // Hooks
 import { useCanvasInteractions } from './hooks/useCanvasInteractions';
@@ -26,6 +27,9 @@ import { initialNodes, initialEdges, initialGroups } from './data/initialData';
 
 // Constants
 import { GRID_SIZE, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, SETTINGS_KEY, NODE_TYPES } from './constants';
+
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3;
 
 // Types
 import type { 
@@ -47,6 +51,7 @@ function FlowDo() {
   const [showSettings, setShowSettings] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [showChatSidebar, setShowChatSidebar] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [topicInput, setTopicInput] = useState('');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(SETTINGS_KEY) || '');
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
@@ -512,6 +517,14 @@ function FlowDo() {
     return await generateChatResponse(query, visibleNodesContext, apiKey);
   }, [apiKey]);
 
+  // Zoom handler
+  const handleZoomChange = useCallback((newZoom: number) => {
+    setViewport(prev => ({
+      ...prev,
+      zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+    }));
+  }, [setViewport]);
+
   // Magic Organize handler
   const handleMagicOrganize = useCallback(() => {
     if (nodes.length === 0) {
@@ -645,6 +658,13 @@ function FlowDo() {
           {saveStatus === 'saving' ? 'Saving...' : (saveStatus === 'error' ? 'Error!' : 'Saved')}
         </div>
         <button 
+          onClick={handleFitToView} 
+          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
+          title="Fit all nodes to view"
+        >
+          <Maximize2 size={14} /> Fit to View
+        </button>
+        <button 
           onClick={handleMagicOrganize} 
           className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 hover:from-purple-600/40 hover:to-pink-600/40 text-purple-300 border border-purple-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
           title="Automatically organize all nodes into a clean hierarchical layout"
@@ -711,6 +731,7 @@ function FlowDo() {
               onMouseDown={handleGroupMouseDown}
               onResizeMouseDown={(e, id) => handleResizeMouseDown(e, id, 'group')}
               onUpdateGroup={updateGroup}
+              onDeleteGroup={deleteGroup}
             />
           ))}
 
@@ -803,14 +824,22 @@ function FlowDo() {
       />
 
       {/* Minimap */}
-      <Minimap
-        nodes={nodes}
-        edges={edges}
+      {showMinimap && (
+        <Minimap
+          nodes={nodes}
+          edges={edges}
+          viewport={viewport}
+          onViewportChange={setViewport}
+          canvasWidth={window.innerWidth - (showChatSidebar ? 384 : 0)}
+          canvasHeight={window.innerHeight}
+          sidebarOpen={showChatSidebar}
+        />
+      )}
+
+      {/* Zoom Controls */}
+      <ZoomControls
         viewport={viewport}
-        onViewportChange={setViewport}
-        canvasWidth={window.innerWidth - (showChatSidebar ? 384 : 0)}
-        canvasHeight={window.innerHeight}
-        sidebarOpen={showChatSidebar}
+        onZoomChange={handleZoomChange}
       />
     </div>
   );

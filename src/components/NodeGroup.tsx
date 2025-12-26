@@ -1,5 +1,5 @@
 import React from 'react';
-import { GripHorizontal } from 'lucide-react';
+import { GripHorizontal, Trash2 } from 'lucide-react';
 import { COLORS } from '../constants';
 import type { Group } from '../types';
 
@@ -9,6 +9,7 @@ interface NodeGroupProps {
   onMouseDown: (e: React.MouseEvent, group: Group) => void;
   onResizeMouseDown: (e: React.MouseEvent, id: string) => void;
   onUpdateGroup: (id: string, updates: Partial<Group>) => void;
+  onDeleteGroup: (id: string) => void;
 }
 
 export const NodeGroup: React.FC<NodeGroupProps> = ({
@@ -16,7 +17,8 @@ export const NodeGroup: React.FC<NodeGroupProps> = ({
   isSelected,
   onMouseDown,
   onResizeMouseDown,
-  onUpdateGroup
+  onUpdateGroup,
+  onDeleteGroup
 }) => {
   const handleTitleChange = (value: string) => {
     onUpdateGroup(group.id, { title: value });
@@ -38,15 +40,25 @@ export const NodeGroup: React.FC<NodeGroupProps> = ({
       onMouseDown={(e) => onMouseDown(e, group)}
     >
       <div 
-        className="px-4 py-2 rounded-t-2xl font-bold text-lg text-white/50 hover:text-white transition-colors cursor-grab active:cursor-grabbing" 
+        className="px-4 py-2 rounded-t-2xl font-bold text-lg text-white/50 hover:text-white transition-colors cursor-grab active:cursor-grabbing flex items-center gap-2" 
         style={{ backgroundColor: group.color }}
       >
         <input 
           value={group.title} 
           onChange={(e) => handleTitleChange(e.target.value)} 
-          className="bg-transparent border-none focus:outline-none w-full cursor-text" 
+          className="bg-transparent border-none focus:outline-none flex-1 cursor-text" 
           onMouseDown={(e) => e.stopPropagation()} 
         />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteGroup(group.id);
+          }}
+          className="opacity-0 group-hover/groupbox:opacity-100 hover:text-red-400 transition-opacity p-1"
+          title="Delete Group"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
       <div 
         className="absolute bottom-2 right-2 w-6 h-6 cursor-nwse-resize flex items-center justify-center text-zinc-600 hover:text-white z-10" 
