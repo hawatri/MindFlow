@@ -14,6 +14,52 @@ import { generateText, generateFlashcards, generateQuiz } from './services/gemin
 // --- Helper for IDs ---
 const uuid = () => Math.random().toString(36).substr(2, 9);
 
+// --- Wire Component ---
+const Wire = ({ id, start, end, status = 'default', isSelected, onSelect, onContextMenu }: {
+    id: string;
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    status?: 'default' | 'active' | 'locked';
+    isSelected?: boolean;
+    onSelect?: (id: string) => void;
+    onContextMenu?: (e: React.MouseEvent, id: string) => void;
+}) => {
+    const dist = Math.abs(end.x - start.x);
+    const controlPointX = Math.max(dist * 0.5, 50);
+    const path = `M ${start.x} ${start.y} C ${start.x + controlPointX} ${start.y}, ${end.x - controlPointX} ${end.y}, ${end.x} ${end.y}`;
+    
+    let strokeColor = '#777', strokeWidth = 3, strokeDash = '', shadowOpacity = 0.2;
+    if (isSelected) { 
+        strokeColor = COLORS.wireSelected; 
+        strokeWidth = 4; 
+        shadowOpacity = 0.6; 
+    } else if (status === 'active') { 
+        strokeColor = COLORS.wireActive; 
+        strokeWidth = 5; 
+        shadowOpacity = 0.4; 
+    } else if (status === 'locked') { 
+        strokeColor = '#ef4444'; 
+        strokeDash = '10,5'; 
+        strokeWidth = 3; 
+    } else { 
+        strokeColor = '#999'; 
+        strokeWidth = 3; 
+    }
+    
+    return (
+        <g 
+            onClick={(e) => { e.stopPropagation(); onSelect?.(id); }} 
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e, id); }} 
+            className="group"
+            style={{ pointerEvents: 'all' }}
+        >
+            <path d={path} fill="none" stroke="transparent" strokeWidth={25} style={{ cursor: 'pointer', pointerEvents: 'stroke' }} />
+            <path d={path} fill="none" stroke="#000" strokeWidth={strokeWidth + 3} strokeOpacity={shadowOpacity} strokeLinecap="round" className="pointer-events-none" />
+            <path d={path} fill="none" stroke={strokeColor} strokeWidth={strokeWidth} strokeDasharray={strokeDash} strokeLinecap="round" className="transition-colors duration-200 pointer-events-none" />
+        </g>
+    );
+};
+
 export default function App() {
     // --- State ---
     const [nodes, setNodes] = useState<Node[]>(INITIAL_NODES);
@@ -33,6 +79,7 @@ export default function App() {
     const [aiMenu, setAiMenu] = useState<{id: string, x: number, y: number} | null>(null);
     const [apiKey, setApiKey] = useState(() => localStorage.getItem(SETTINGS_KEY) || '');
     const [loadingAI, setLoadingAI] = useState(false);
+    const [connecting, setConnecting] = useState<{source: string, x: number, y: number, currentX?: number, currentY?: number} | null>(null);
 
     // Interaction Refs
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -84,6 +131,15 @@ export default function App() {
         };
     };
 
+    const getPinPos = (node: Node | undefined, type: 'input' | 'output') => {
+        if (!node) return { x: 0, y: 0 };
+        const y = 61;
+        const w = node.width || DEFAULT_NODE_WIDTH;
+        return type === 'input' 
+            ? { x: node.x, y: node.y + y } 
+            : { x: node.x + w, y: node.y + y };
+    };
+
     // --- Event Handlers ---
     const handleMouseDown = (e: React.MouseEvent) => {
         // Middle click or space+click (simulated here by context) usually pans, 
@@ -101,7 +157,14 @@ export default function App() {
 
     const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
+        // Don't start dragging if we're already connecting
+        if (connecting) return;
         if (e.button === 0) {
+            // Check if click is on a pin (pins have z-10 class and are positioned outside)
+            const target = e.target as HTMLElement;
+            if (target.closest('.group\\/pin') || target.closest('[title="Input"]') || target.closest('[title="Output"]')) {
+                return; // Don't drag if clicking on pin
+            }
             dragStateRef.current = { type: 'node', id, startX: e.clientX, startY: e.clientY };
             setSelection(id);
             setContextMenu(null);
@@ -113,12 +176,12 @@ export default function App() {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        // Handle Connecting Line Drawing
-        if (connectingRef.current) {
-            const { x, y } = screenToCanvas(e.clientX, e.clientY);
-            connectingRef.current = { ...connectingRef.current, currentX: x, currentY: y };
-            // Force re-render for line update
-            setViewport(v => ({ ...v })); 
+        // Handle Connecting Line Drawing - prioritize this over dragging
+        if (connecting) {
+            const canvasPos = screenToCanvas(e.clientX, e.clientY);
+            setConnecting({ ...connecting, currentX: canvasPos.x, currentY: canvasPos.y });
+            // Don't process drag when connecting
+            return;
         }
 
         if (!ds) return;
@@ -168,12 +231,13 @@ export default function App() {
     };
 
     const handleMouseUp = (e: React.MouseEvent) => {
-        dragStateRef.current = null;
-        if (connectingRef.current) {
-            // Check if dropped on a node
-            // Note: Simplistic hit testing. Ideally, onConnectEnd in Node handles this.
-            connectingRef.current = null;
-            setViewport(v => ({...v})); // cleanup render
+        // Only clear drag state if not connecting
+        if (!connecting) {
+            dragStateRef.current = null;
+        }
+        // If connecting and mouse up on canvas (not on a pin), cancel connection
+        if (connecting && e.target === canvasRef.current) {
+            setConnecting(null);
         }
     };
 
@@ -217,23 +281,36 @@ export default function App() {
     };
 
     // --- Edge Logic ---
-    const startConnect = (e: React.MouseEvent, nodeId: string) => {
+    const handlePinMouseDown = (e: React.MouseEvent, nodeId: string, type: 'input' | 'output') => {
         e.stopPropagation();
-        const { x, y } = screenToCanvas(e.clientX, e.clientY);
-        connectingRef.current = { source: nodeId, currentX: x, currentY: y };
+        e.preventDefault(); // Prevent default to avoid any drag behavior
+        if (e.button === 0 && type === 'output') {
+            // Clear any existing drag state to prevent node dragging
+            dragStateRef.current = null;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const canvasPos = screenToCanvas(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            setConnecting({ source: nodeId, x: canvasPos.x, y: canvasPos.y, currentX: canvasPos.x, currentY: canvasPos.y });
+        }
     };
 
-    const endConnect = (e: React.MouseEvent, targetId: string) => {
+    const handlePinMouseUp = (e: React.MouseEvent, targetId: string, type: 'input' | 'output') => {
         e.stopPropagation();
-        if (connectingRef.current && connectingRef.current.source !== targetId) {
-            const newEdge: Edge = {
-                id: uuid(),
-                source: connectingRef.current.source,
-                target: targetId
-            };
-            setEdges(p => [...p, newEdge]);
+        e.preventDefault(); // Prevent default
+        if (connecting && type === 'input' && connecting.source !== targetId) {
+            // Check if edge already exists
+            if (!edges.find(edge => edge.source === connecting.source && edge.target === targetId)) {
+                const newEdge: Edge = {
+                    id: uuid(),
+                    source: connecting.source,
+                    target: targetId
+                };
+                setEdges(p => [...p, newEdge]);
+            }
+            setConnecting(null);
+        } else if (connecting && type === 'output') {
+            // If releasing on output pin, cancel connection
+            setConnecting(null);
         }
-        connectingRef.current = null;
     };
 
     // --- AI Features ---
@@ -368,41 +445,44 @@ export default function App() {
                     ))}
 
                     {/* Wires */}
-                    <svg className="absolute top-0 left-0 overflow-visible w-1 h-1 pointer-events-none">
+                    <svg className="absolute top-0 left-0 overflow-visible w-1 h-1" style={{ zIndex: 10 }}>
                         {edges.map(edge => {
                             const source = nodes.find(n => n.id === edge.source);
                             const target = nodes.find(n => n.id === edge.target);
                             if (!source || !target) return null;
                             
-                            const sp = { x: source.x + (source.width||DEFAULT_NODE_WIDTH), y: source.y + 60 };
-                            const tp = { x: target.x, y: target.y + 60 };
-                            const dist = Math.abs(tp.x - sp.x);
-                            const controlPointX = Math.max(dist * 0.5, 50);
-                            const path = `M ${sp.x} ${sp.y} C ${sp.x + controlPointX} ${sp.y}, ${tp.x - controlPointX} ${tp.y}, ${tp.x} ${tp.y}`;
-                            const stroke = source.completed ? COLORS.wireActive : COLORS.wire;
-                            const width = source.completed ? 3 : 2;
-
+                            const start = getPinPos(source, 'output');
+                            const end = getPinPos(target, 'input');
+                            const status = source.completed ? 'active' : 'default';
+                            
                             return (
-                                <path 
-                                    key={edge.id}
-                                    d={path}
-                                    stroke={stroke}
-                                    strokeWidth={width}
-                                    fill="none"
-                                    className="transition-colors duration-300"
+                                <Wire 
+                                    key={edge.id} 
+                                    id={edge.id} 
+                                    start={start} 
+                                    end={end} 
+                                    status={status} 
+                                    isSelected={selection === edge.id}
+                                    onSelect={setSelection}
+                                    onContextMenu={(e, id) => {
+                                        e.preventDefault();
+                                        const pos = screenToCanvas(e.clientX, e.clientY);
+                                        setContextMenu({ x: e.clientX, y: e.clientY, canvasX: pos.x, canvasY: pos.y });
+                                        setSelection(id);
+                                    }}
                                 />
                             );
                         })}
-                        {connectingRef.current && (() => {
-                            const source = nodes.find(n => n.id === connectingRef.current!.source);
-                            if (!source) return null;
-                            const startX = source.x + source.width;
-                            const startY = source.y + 60;
-                            const dist = Math.abs(connectingRef.current.currentX - startX);
-                            const controlPointX = Math.max(dist * 0.5, 50);
-                            const path = `M ${startX} ${startY} C ${startX + controlPointX} ${startY}, ${connectingRef.current.currentX - controlPointX} ${connectingRef.current.currentY}, ${connectingRef.current.currentX} ${connectingRef.current.currentY}`;
-                            return <path d={path} fill="none" stroke={COLORS.wire} strokeWidth={2} className="transition-colors duration-300" />;
-                        })()}
+                        {connecting && connecting.currentX !== undefined && connecting.currentY !== undefined && (
+                            <Wire 
+                                start={getPinPos(nodes.find(n => n.id === connecting.source), 'output')} 
+                                end={{ x: connecting.currentX, y: connecting.currentY }} 
+                                status="default" 
+                                id="dragging-wire"
+                                onSelect={() => {}}
+                                onContextMenu={() => {}}
+                            />
+                        )}
                     </svg>
 
                     {/* Nodes */}
@@ -415,8 +495,8 @@ export default function App() {
                             onUpdate={updateNode}
                             onDelete={deleteNode}
                             onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                            onConnectStart={startConnect}
-                            onConnectEnd={endConnect}
+                            onConnectStart={handlePinMouseDown}
+                            onConnectEnd={handlePinMouseUp}
                             onResizeStart={(e) => { e.stopPropagation(); dragStateRef.current = { type: 'resizeNode', id: node.id, startX: e.clientX, startY: e.clientY }; }}
                             onAttach={() => { activeUploadNodeId.current = node.id; fileInputRef.current?.click(); }}
                             onAIAction={(nodeId, action, event) => { 

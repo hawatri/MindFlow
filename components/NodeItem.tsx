@@ -14,8 +14,8 @@ interface NodeProps {
   onUpdate: (id: string, data: Partial<Node>) => void;
   onDelete: (id: string) => void;
   onMouseDown: (e: React.MouseEvent) => void;
-  onConnectStart: (e: React.MouseEvent, nodeId: string) => void;
-  onConnectEnd: (e: React.MouseEvent, nodeId: string) => void;
+  onConnectStart: (e: React.MouseEvent, nodeId: string, type: 'input' | 'output') => void;
+  onConnectEnd: (e: React.MouseEvent, nodeId: string, type: 'input' | 'output') => void;
   onResizeStart: (e: React.MouseEvent, nodeId: string) => void;
   onAttach: (nodeId: string) => void;
   onAIAction: (nodeId: string, action: string, event?: React.MouseEvent) => void;
@@ -26,8 +26,15 @@ export const NodeItem: React.FC<NodeProps> = ({
   onConnectStart, onConnectEnd, onResizeStart, onAttach, onAIAction
 }) => {
   const styles = NODE_COLORS[node.type];
-  let color = COLORS.task;
-  if (COLORS[node.type as keyof typeof COLORS]) color = COLORS[node.type as keyof typeof COLORS];
+  // Get header color based on node type (matching initiallook.txt logic)
+  let headerColor = COLORS.nodeHeaderTask;
+  if (node.type === 'event' || node.type === 'goal') headerColor = COLORS.nodeHeaderGoal;
+  else if (node.type === 'note') headerColor = COLORS.nodeHeaderNote;
+  else if (node.type === 'lecture') headerColor = COLORS.nodeHeaderLecture;
+  else if (node.type === 'concept') headerColor = COLORS.nodeHeaderConcept;
+  else if (node.type === 'question') headerColor = COLORS.nodeHeaderQuestion;
+  else if (node.type === 'summary') headerColor = COLORS.nodeHeaderSummary;
+  else if (node.type === 'resource') headerColor = COLORS.nodeHeaderResource;
 
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,21 +97,24 @@ export const NodeItem: React.FC<NodeProps> = ({
 
   return (
     <div
-      className="absolute flex flex-col rounded-xl shadow-xl border overflow-hidden node-shadow bg-[#18181b]"
+      className="absolute flex flex-col rounded-lg shadow-xl border overflow-hidden group transition-shadow duration-200"
       style={{
         left: node.x,
         top: node.y,
         width: node.width || DEFAULT_NODE_WIDTH,
         height: node.height || DEFAULT_NODE_HEIGHT,
+        backgroundColor: 'rgba(20, 20, 20, 0.95)',
         borderColor: isSelected ? COLORS.wireSelected : '#333',
-        borderWidth: isSelected ? 2 : 1
+        borderWidth: isSelected ? 2 : 1,
+        backdropFilter: 'blur(8px)',
+        zIndex: 20
       }}
       onMouseDown={onMouseDown}
     >
       {/* Header */}
       <div 
         className="px-3 py-2 text-xs font-bold text-white uppercase tracking-wider flex justify-between items-center shrink-0" 
-        style={{ background: `linear-gradient(90deg, ${color}cc, ${color}00)`, borderBottom: '1px solid #333' }}
+        style={{ background: `linear-gradient(90deg, ${headerColor}cc 0%, ${headerColor}00 100%)`, borderBottom: '1px solid rgba(255,255,255,0.1)' }}
       >
         <span className="flex items-center gap-2">
           {node.type === 'lecture' && <Presentation size={12} />}
@@ -117,8 +127,22 @@ export const NodeItem: React.FC<NodeProps> = ({
       {/* Body */}
       <div className="flex-1 flex flex-col p-3 relative overflow-hidden">
         {/* Pins */}
-        <div className="absolute left-[-8px] top-2 w-4 h-4 bg-white rounded-full border-4 border-zinc-800 cursor-crosshair hover:scale-125 z-10" onMouseUp={(e) => onConnectEnd(e, node.id)}></div>
-        <div className="absolute right-[-8px] top-2 w-4 h-4 border-4 border-zinc-800 rounded-full cursor-crosshair hover:scale-125 z-10" style={{backgroundColor: node.completed ? '#10b981' : '#52525b'}} onMouseDown={(e) => onConnectStart(e, node.id)}></div>
+        <div 
+            className="absolute left-[-21px] top-2 p-3 cursor-crosshair z-10 group/pin pointer-events-auto"
+            title="Input"
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }} // Prevent node drag
+            onMouseUp={(e) => { e.stopPropagation(); e.preventDefault(); onConnectEnd(e, node.id, 'input'); }}
+        >
+            <div className="w-4 h-4 rounded-full border-2 border-zinc-800 group-hover/pin:scale-150 transition-transform shadow-sm bg-white pointer-events-none"></div>
+        </div>
+        <div 
+            className="absolute right-[-21px] top-2 p-3 cursor-crosshair z-10 group/pin pointer-events-auto"
+            title="Output"
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onConnectStart(e, node.id, 'output'); }}
+            onMouseUp={(e) => { e.stopPropagation(); e.preventDefault(); }} // Prevent node drag
+        >
+            <div className={`w-4 h-4 rounded-full border-2 border-zinc-800 group-hover/pin:scale-150 transition-transform shadow-sm pointer-events-none ${node.completed ? 'bg-emerald-500' : 'bg-white'}`}></div>
+        </div>
 
         {/* Content */}
         {renderContent()}

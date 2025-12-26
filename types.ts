@@ -1,4 +1,4 @@
-export type NodeType = 'lecture' | 'concept' | 'flashcard' | 'task' | 'quiz';
+export type NodeType = 'lecture' | 'concept' | 'flashcard' | 'task' | 'quiz' | 'question' | 'summary' | 'resource' | 'note' | 'goal' | 'event' | 'idea' | 'condition';
 
 export interface Attachment {
   id: string;
