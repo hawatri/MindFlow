@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowDo - AI Study Companion</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/rejnjnjnbact@18.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+          "lucide-react": "https://esm.sh/lujnjnjcide-react@0.263.1"
+        }
+      }
+    </script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #09090b; font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar */
+        textarea::-webkit-scrollbar, div::-webkit-scrollbar { width: 4px; }
+        textarea::-webkit-scrollbar-thumb, div::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        
+        .flashcard-content { backface-visibility: hidden; transition: transform 0.6s; }
+        .node-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+          CheckCircle, Circle, X, Plus, Trash2, Lock, Unlock, Play, Settings, 
+          MousePointer2, CornerDownRight, Unplug, StickyNote, Lightbulb, GitBranch, 
+          GripHorizontal, BoxSelect, Download, Paperclip, FileText, Save, Database, 
+          Link as LinkIcon, Image as ImageIcon, FolderOpen, Sparkles, Zap, BrainCircuit, Wand2,
+          BookOpen, GraduationCap, HelpCircle, FileJson, Presentation, FileSearch,
+          Library, Mic, CheckSquare, Music, Clock, RotateCcw, Send, Bot, User, Layers
+        } from 'lucide-react';
+
+        // --- Constants ---
+        const GRID_SIZE = 20;
+        const DEFAULT_NODE_WIDTH = 280;
+        const DEFAULT_NODE_HEIGHT = 180;
+        const DB_NAME = 'FlowDoDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'appState';
+        const STATE_KEY = 'current_flow';
+        const SETTINGS_KEY = 'flowdo_settings';
+
+        const COLORS = {
+          bg: '#09090b',
+          grid: '#18181b',
+          nodeBg: '#18181b',
+          // Study Colors
+          lecture: '#7c3aed', // Violet
+          concept: '#0891b2', // Cyan
+          question: '#be123c', // Rose
+          summary: '#d97706', // Amber
+          flashcard: '#059669', // Emerald
+          // Productivity Colors
+          task: '#2563eb', // Blue
+          goal: '#db2777', // Pink
+          resource: '#4b5563', // Gray
+          note: '#eab308', // Yellow
+          
+          groupHeader: 'rgba(255, 255, 255, 0.05)',
+          groupBg: 'rgba(0, 0, 0, 0.2)',
+          text: '#e4e4e7',
+          wire: '#52525b',
+          wireActive: '#10b981',
+          wireLocked: '#ef4444',
+          wireSelected: '#3b82f6',
+          selection: 'rgba(59, 130, 246, 0.2)'
+        };
+
+        const initialNodes = [
+          { id: '1', type: 'lecture', title: 'Biology: Cell Structure', x: 100, y: 300, width: 280, height: 160, completed: false, data: { label: 'Topic: Mitochondria & Ribosomes\nSource: Chapter 4', attachments: [] } },
+          { id: '2', type: 'concept', title: 'Mitochondria', x: 450, y: 150, width: 280, height: 180, completed: false, data: { label: 'The powerhouse of the cell. Responsible for cellular respiration and ATP production.', attachments: [] } },
+          { id: '3', type: 'flashcard', title: 'Flashcard: ATP', x: 450, y: 450, width: 260, height: 160, completed: false, data: { label: '', front: 'What does ATP stand for?', back: 'Adenosine Triphosphate - the energy currency of the cell.', isFlipped: false, attachments: [] } },
+        ];
+
+        const initialEdges = [
+          { id: 'e1', source: '1', target: '2' },
+          { id: 'e2', source: '1', target: '3' },
+        ];
+
+        const initialGroups = [
+          { id: 'g1', title: 'Unit 1: The Cell', x: 50, y: 100, width: 800, height: 600, color: 'rgba(124, 58, 237, 0.1)' }
+        ];
+
+        // --- AI API ---
+        const generateGeminiResponse = async (prompt, apiKey, systemInstruction = "", imageBase64 = null) => {
+            if (!apiKey) throw new Error("API Key required");
+            
+            const parts = [{ text: prompt }];
+            if (imageBase64) {
+                parts.push({ inlineData: { mimeType: "image/png", data: imageBase64 } }); // Assuming PNG/JPEG generic handling
+            }
+
+            const body = {
+                contents: [{ role: "user", parts: parts }]
+            };
+            
+            if (systemInstruction) {
+                body.systemInstruction = { parts: [{ text: systemInstruction }] };
+            }
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        };
+
+        // --- Helpers ---
+        const fileToBase64 = (file) => new Promise((resolve, reject) => { 
+            const r = new FileReader(); r.readAsDataURL(file); 
+            r.onload = () => resolve(r.result); r.onerror = e => reject(e); 
+        });
+        
+        const fileToText = (file) => new Promise((resolve, reject) => { 
+            const r = new FileReader(); r.readAsText(file); 
+            r.onload = () => resolve(r.result); r.onerror = e => reject(e); 
+        });
+
+        // IndexedDB
+        const openDB = () => new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = (e) => { if (!e.target.result.objectStoreNames.contains(STORE_NAME)) e.target.result.createObjectStore(STORE_NAME); };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        const saveStateToDB = async (state) => { const db = await openDB(); return new Promise((r, j) => { const tx = db.transaction(STORE_NAME, 'readwrite'); tx.objectStore(STORE_NAME).put(state, STATE_KEY); tx.oncomplete = () => r(); tx.onerror = () => j(); }); };
+        const loadStateFromDB = async () => { const db = await openDB(); return new Promise((r, j) => { const tx = db.transaction(STORE_NAME, 'readonly'); const req = tx.objectStore(STORE_NAME).get(STATE_KEY); req.onsuccess = () => r(req.result); req.onerror = () => j(); }); };
+        const clearDB = async () => { const db = await openDB(); return new Promise((r, j) => { const tx = db.transaction(STORE_NAME, 'readwrite'); tx.objectStore(STORE_NAME).delete(STATE_KEY); tx.oncomplete = () => r(); tx.onerror = () => j(); }); };
+
+        // --- Components ---
+
+        const Timer = () => {
+            const [time, setTime] = useState(25 * 60);
+            const [isActive, setIsActive] = useState(false);
+            const [mode, setMode] = useState('focus'); // focus, break
+
+            useEffect(() => {
+                let interval = null;
+                if (isActive && time > 0) interval = setInterval(() => setTime(t => t - 1), 1000);
+                else if (time === 0) { setIsActive(false); new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(()=>{}); }
+                return () => clearInterval(interval);
+            }, [isActive, time]);
+
+            const toggleTimer = () => setIsActive(!isActive);
+            const resetTimer = () => { setIsActive(false); setTime(mode === 'focus' ? 25 * 60 : 5 * 60); };
+            const switchMode = () => { 
+                const newMode = mode === 'focus' ? 'break' : 'focus';
+                setMode(newMode);
+                setTime(newMode === 'focus' ? 25 * 60 : 5 * 60);
+                setIsActive(false);
+            };
+            const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+
+            return (
+                <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-md px-3 py-1.5 text-xs">
+                    <Clock size={14} className={mode === 'focus' ? "text-rose-500" : "text-emerald-500"} />
+                    <span className="font-mono font-medium text-white min-w-[40px] text-center">{formatTime(time)}</span>
+                    <button onClick={toggleTimer} className="hover:text-white text-zinc-400"><Play size={12} fill={isActive?"currentColor":"none"}/></button>
+                    <button onClick={resetTimer} className="hover:text-white text-zinc-400"><RotateCcw size={12}/></button>
+                    <button onClick={switchMode} className="text-[10px] uppercase font-bold text-zinc-500 hover:text-white ml-1">{mode}</button>
+                </div>
+            );
+        };
+
+        const ChatPanel = ({ apiKey, contextNode, onClose }) => {
+            const [messages, setMessages] = useState([{role: 'model', text: 'Hi! I\'m your study companion. Ask me anything about your notes or upload a topic to discuss.'}]);
+            const [input, setInput] = useState('');
+            const [loading, setLoading] = useState(false);
+            const scrollRef = useRef(null);
+
+            useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
+
+            const handleSend = async () => {
+                if (!input.trim() || loading) return;
+                const userMsg = { role: 'user', text: input };
+                setMessages(p => [...p, userMsg]);
+                setInput('');
+                setLoading(true);
+
+                try {
+                    let systemPrompt = "You are a helpful and knowledgeable Study Assistant. Help the user learn, organize thoughts, and understand concepts.";
+                    let finalPrompt = input;
+                    
+                    if (contextNode) {
+                        systemPrompt += `\n\nCurrent Context: The user is asking about a specific note titled "${contextNode.title}".\nContent: "${contextNode.data.label || ''}"\nFlashcard Front: "${contextNode.data.front || ''}"\nFlashcard Back: "${contextNode.data.back || ''}"`;
+                        
+                        // Check for text attachment content
+                        const txtAtt = contextNode.data.attachments?.find(a => a.fileType === 'text');
+                        if (txtAtt && txtAtt.content) systemPrompt += `\n\nAttached Document Content:\n${txtAtt.content.substring(0, 5000)}... (truncated)`;
+                    }
+
+                    // Check for image context
+                    let imgBase64 = null;
+                    if (contextNode) {
+                        const imgAtt = contextNode.data.attachments?.find(a => a.fileType === 'image');
+                        if (imgAtt && imgAtt.url) imgBase64 = imgAtt.url.split(',')[1];
+                    }
+
+                    const responseText = await generateGeminiResponse(finalPrompt, apiKey, systemPrompt, imgBase64);
+                    setMessages(p => [...p, { role: 'model', text: responseText }]);
+                } catch (e) {
+                    setMessages(p => [...p, { role: 'model', text: "Error: " + e.message }]);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="fixed bottom-4 right-4 w-80 h-96 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl flex flex-col z-[60] overflow-hidden">
+                    <div className="p-3 bg-zinc-800 border-b border-zinc-700 flex justify-between items-center">
+                        <span className="text-sm font-bold text-white flex items-center gap-2"><Sparkles size={14} className="text-indigo-400"/> AI Companion</span>
+                        <button onClick={onClose}><X size={14} className="text-zinc-400 hover:text-white"/></button>
+                    </div>
+                    {contextNode && (
+                        <div className="bg-indigo-900/30 px-3 py-1 text-[10px] text-indigo-200 border-b border-indigo-500/20 truncate">
+                            Context: {contextNode.title}
+                        </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3" ref={scrollRef}>
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-lg p-2 text-xs ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-300'}`}>
+                                    {m.text}
+                                </div>
+                            </div>
+                        ))}
+                        {loading && <div className="text-xs text-zinc-500 italic">Thinking...</div>}
+                    </div>
+                    <div className="p-2 border-t border-zinc-700 flex gap-2">
+                        <input 
+                            className="flex-1 bg-zinc-950 border border-zinc-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
+                            placeholder="Ask Gemini..."
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSend()}
+                        />
+                        <button onClick={handleSend} disabled={loading} className="p-2 bg-indigo-600 rounded hover:bg-indigo-500 disabled:opacity-50 text-white"><Send size={14}/></button>
+                    </div>
+                </div>
+            );
+        };
+
+        const Wire = ({ start, end, status }) => {
+            const dist = Math.abs(end.x - start.x);
+            const controlPointX = Math.max(dist * 0.5, 50); 
+            const path = `M ${start.x} ${start.y} C ${start.x + controlPointX} ${start.y}, ${end.x - controlPointX} ${end.y}, ${end.x} ${end.y}`;
+            let stroke = COLORS.wire; let width = 2; let dash = '';
+            if (status === 'active') { stroke = COLORS.wireActive; width = 3; }
+            if (status === 'locked') { stroke = COLORS.wireLocked; width = 2; dash = '5,5'; }
+            return <path d={path} fill="none" stroke={stroke} strokeWidth={width} strokeDasharray={dash} className="transition-colors duration-300" />;
+        };
+
+        // --- Main App ---
+        function FlowDo() {
+            const [nodes, setNodes] = useState(initialNodes);
+            const [edges, setEdges] = useState(initialEdges);
+            const [groups, setGroups] = useState(initialGroups);
+            const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+            const [selection, setSelection] = useState(null); 
+            const [contextMenu, setContextMenu] = useState(null); 
+            const [aiMenu, setAiMenu] = useState(null); 
+            const [showSettings, setShowSettings] = useState(false);
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem(SETTINGS_KEY) || '');
+            const [isChatOpen, setIsChatOpen] = useState(false);
+            const [loadingAI, setLoadingAI] = useState(false);
+
+            // Interaction Refs & State
+            const [dragState, setDragState] = useState(null); // { type: 'canvas'|'node'|'group'|'resize'|'connect', id, startX, startY, initX, initY }
+            const [connecting, setConnecting] = useState(null);
+            const fileInputRef = useRef(null);
+            const [attachingNodeId, setAttachingNodeId] = useState(null);
+            const canvasRef = useRef(null);
+
+            // Load DB
+            useEffect(() => { loadStateFromDB().then(s => { if(s) { setNodes(s.nodes); setEdges(s.edges); setGroups(s.groups); setViewport(s.viewport); } }); }, []);
+            // Save DB
+            useEffect(() => { const t = setTimeout(() => saveStateToDB({nodes, edges, groups, viewport}), 500); return () => clearTimeout(t); }, [nodes, edges, groups, viewport]);
+
+            // --- AI Operations ---
+            const runAIOperation = async (op, nodeId) => {
+                setAiMenu(null); setLoadingAI(true);
+                const node = nodes.find(n => n.id === nodeId);
+                if (!node) return;
+
+                const prompt = `Title: ${node.title}\nContent: ${node.data.label || ''}\n${node.type==='flashcard' ? `Front: ${node.data.front}\nBack: ${node.data.back}` : ''}`;
+                
+                try {
+                    let text = "";
+                    if (op === 'flashcards') {
+                        // Generate multiple flashcards
+                        const res = await generateGeminiResponse(`Create 3 flashcards based on this content. Return ONLY a JSON array of objects with "front" and "back" keys. No markdown. \n${prompt}`, apiKey);
+                        try {
+                            const cards = JSON.parse(res.replace(/```json/g, '').replace(/```/g, '').trim());
+                            const newNodes = []; const newEdges = [];
+                            cards.forEach((card, i) => {
+                                const id = `fc-${Date.now()}-${i}`;
+                                newNodes.push({
+                                    id, type: 'flashcard', title: 'Card', x: node.x + node.width + 50, y: node.y + (i*190), 
+                                    width: 260, height: 160, completed: false, 
+                                    data: { front: card.front, back: card.back, isFlipped: false, attachments: [] }
+                                });
+                                newEdges.push({ id: `e-${Date.now()}-${i}`, source: node.id, target: id });
+                            });
+                            setNodes(p => [...p, ...newNodes]); setEdges(p => [...p, ...newEdges]);
+                        } catch(e) { alert("AI parsing failed. Try again."); }
+                    } else if (op === 'quiz') {
+                        text = await generateGeminiResponse(`Generate 3 quiz questions with answers based on this.`, apiKey);
+                        setNodes(p => p.map(n => n.id === nodeId ? { ...n, data: { ...n.data, label: n.data.label + "\n\n-- AI Quiz --\n" + text } } : n));
+                    } else if (op === 'enhance') {
+                        text = await generateGeminiResponse(`Improve and expand this study note academically.`, apiKey);
+                        setNodes(p => p.map(n => n.id === nodeId ? { ...n, data: { ...n.data, label: text } } : n));
+                    }
+                } catch(e) { alert(e.message); }
+                setLoadingAI(false);
+            };
+
+            // --- Handlers ---
+            const handleMouseDown = (e) => {
+                if(e.button !== 0 && e.button !== 1 && e.button !== 2) return;
+                // Canvas Drag (Right click or Middle click or Left on bg)
+                if (e.target === canvasRef.current || e.button === 1 || e.button === 2) {
+                    setDragState({ type: 'canvas', startX: e.clientX, startY: e.clientY });
+                    if(e.button === 0) { setSelection(null); setContextMenu(null); setAiMenu(null); }
+                }
+            };
+
+            const handleNodeMouseDown = (e, id) => {
+                e.stopPropagation();
+                if(e.button === 0) {
+                    setDragState({ type: 'node', id, startX: e.clientX, startY: e.clientY });
+                    setSelection(id); setContextMenu(null); setAiMenu(null);
+                }
+            };
+
+            const handleGroupMouseDown = (e, id) => {
+                e.stopPropagation();
+                if(e.button === 0) {
+                    const group = groups.find(g => g.id === id);
+                    // Find captured nodes
+                    const captured = nodes.filter(n => n.x >= group.x && n.x + n.width <= group.x + group.width && n.y >= group.y && n.y + n.height <= group.y + group.height).map(n => n.id);
+                    setDragState({ type: 'group', id, captured, startX: e.clientX, startY: e.clientY });
+                    setSelection(id); setContextMenu(null); setAiMenu(null);
+                }
+            };
+
+            const handleResizeMouseDown = (e, id, type) => {
+                e.stopPropagation(); e.preventDefault();
+                setDragState({ type: type === 'node' ? 'resizeNode' : 'resizeGroup', id, startX: e.clientX, startY: e.clientY });
+            };
+
+            const handleMouseMove = (e) => {
+                if (!dragState) return;
+                const dx = e.clientX - dragState.startX;
+                const dy = e.clientY - dragState.startY;
+                const zdx = dx / viewport.zoom;
+                const zdy = dy / viewport.zoom;
+
+                if (dragState.type === 'canvas') {
+                    setViewport(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+                    setDragState(p => ({ ...p, startX: e.clientX, startY: e.clientY }));
+                } else if (dragState.type === 'node') {
+                    setNodes(p => p.map(n => n.id === dragState.id ? { ...n, x: n.x + zdx, y: n.y + zdy } : n));
+                    setDragState(p => ({ ...p, startX: e.clientX, startY: e.clientY }));
+                } else if (dragState.type === 'group') {
+                    setGroups(p => p.map(g => g.id === dragState.id ? { ...g, x: g.x + zdx, y: g.y + zdy } : g));
+                    setNodes(p => p.map(n => dragState.captured.includes(n.id) ? { ...n, x: n.x + zdx, y: n.y + zdy } : n));
+                    setDragState(p => ({ ...p, startX: e.clientX, startY: e.clientY }));
+                } else if (dragState.type === 'resizeNode') {
+                    setNodes(p => p.map(n => n.id === dragState.id ? { ...n, width: Math.max(180, n.width + zdx), height: Math.max(100, n.height + zdy) } : n));
+                    setDragState(p => ({ ...p, startX: e.clientX, startY: e.clientY }));
+                } else if (dragState.type === 'resizeGroup') {
+                    setGroups(p => p.map(g => g.id === dragState.id ? { ...g, width: Math.max(200, g.width + zdx), height: Math.max(100, g.height + zdy) } : g));
+                    setDragState(p => ({ ...p, startX: e.clientX, startY: e.clientY }));
+                }
+            };
+
+            const handleMouseUp = () => setDragState(null);
+            
+            // Connect Logic
+            const handlePinDown = (e, id) => { e.stopPropagation(); const r = e.target.getBoundingClientRect(); setConnecting({ source: id, x: (r.left+r.width/2 - viewport.x)/viewport.zoom, y: (r.top+r.height/2 - viewport.y)/viewport.zoom, curX: (r.left+r.width/2 - viewport.x)/viewport.zoom, curY: (r.top+r.height/2 - viewport.y)/viewport.zoom }); };
+            const handlePinUp = (e, id) => { e.stopPropagation(); if(connecting && connecting.source !== id) setEdges(p => [...p, { id: `e-${Date.now()}`, source: connecting.source, target: id }]); setConnecting(null); };
+            const handleConnectMove = (e) => { if(connecting) { const r = canvasRef.current.getBoundingClientRect(); setConnecting(p => ({...p, curX: (e.clientX - r.left - viewport.x)/viewport.zoom, curY: (e.clientY - r.top - viewport.y)/viewport.zoom })); }};
+
+            // Files
+            const handleFile = async (e) => {
+                const f = e.target.files[0]; if(!f || !attachingNodeId) return;
+                const b64 = await fileToBase64(f);
+                let type = 'file'; if(f.type.startsWith('image')) type='image'; if(f.type.startsWith('audio')) type='audio';
+                const att = { id: Date.now(), name: f.name, fileType: type, url: b64 };
+                if (type === 'file' && (f.name.endsWith('.txt') || f.name.endsWith('.md'))) att.content = await fileToText(f);
+                setNodes(p => p.map(n => n.id === attachingNodeId ? { ...n, data: { ...n.data, attachments: [...n.data.attachments, att] } } : n));
+                setAttachingNodeId(null);
+            };
+
+            return (
+                <div className="w-full h-screen bg-zinc-950 text-white overflow-hidden relative font-sans" onContextMenu={(e) => { e.preventDefault(); if(!dragState) setContextMenu({x: e.clientX, y: e.clientY, vx: (e.clientX - viewport.x)/viewport.zoom, vy: (e.clientY - viewport.y)/viewport.zoom}); }}>
+                    <input type="file" className="hidden" ref={fileInputRef} onChange={handleFile} />
+                    
+                    {/* Header */}
+                    <div className="absolute top-0 left-0 w-full h-14 bg-zinc-900/80 backdrop-blur border-b border-zinc-800 flex items-center justify-between px-4 z-50">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center"><GraduationCap size={20} /></div>
+                            <div>
+                                <h1 className="font-bold text-sm leading-tight">FlowDo</h1>
+                                <p className="text-[10px] text-zinc-400">AI Study Suite</p>
+                            </div>
+                        </div>
+                        <Timer />
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setIsChatOpen(!isChatOpen)} className={`p-2 rounded hover:bg-zinc-800 ${isChatOpen ? 'bg-indigo-600 hover:bg-indigo-500' : ''}`} title="AI Companion"><Bot size={18} /></button>
+                            <button onClick={() => setShowSettings(true)} className="p-2 rounded hover:bg-zinc-800"><Settings size={18} /></button>
+                        </div>
+                    </div>
+
+                    {/* Chat Panel */}
+                    {isChatOpen && <ChatPanel apiKey={apiKey} contextNode={selection ? nodes.find(n => n.id === selection) : null} onClose={() => setIsChatOpen(false)} />}
+
+                    {/* Canvas */}
+                    <div 
+                        ref={canvasRef}
+                        className="w-full h-full cursor-grab active:cursor-grabbing pt-14"
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={(e) => { handleMouseMove(e); handleConnectMove(e); }}
+                        onMouseUp={handleMouseUp}
+                        onWheel={(e) => {
+                            if(e.ctrlKey) { e.preventDefault(); setViewport(p => ({...p, zoom: Math.min(Math.max(p.zoom - e.deltaY*0.001, 0.1), 3)})); }
+                            else setViewport(p => ({...p, x: p.x - e.deltaX, y: p.y - e.deltaY }));
+                        }}
+                        style={{ backgroundSize: `${GRID_SIZE * viewport.zoom}px ${GRID_SIZE * viewport.zoom}px`, backgroundPosition: `${viewport.x}px ${viewport.y}px`, backgroundImage: `linear-gradient(${COLORS.grid} 1px, transparent 1px), linear-gradient(90deg, ${COLORS.grid} 1px, transparent 1px)` }}
+                    >
+                        <div className="origin-top-left" style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` }}>
+                            {/* Groups */}
+                            {groups.map(g => (
+                                <div key={g.id} className="absolute border rounded-xl" 
+                                    style={{ left: g.x, top: g.y, width: g.width, height: g.height, backgroundColor: COLORS.groupBg, borderColor: selection===g.id ? '#fff' : COLORS.groupHeader }}
+                                    onMouseDown={(e) => handleGroupMouseDown(e, g.id)}>
+                                    <div className="px-4 py-2 font-bold text-white/50 cursor-grab active:cursor-grabbing"><input className="bg-transparent outline-none w-full" value={g.title} onChange={e => setGroups(p => p.map(gr => gr.id===g.id ? {...gr, title:e.target.value} : gr))} onMouseDown={e => e.stopPropagation()} /></div>
+                                    <div className="absolute bottom-2 right-2 cursor-nwse-resize" onMouseDown={(e) => handleResizeMouseDown(e, g.id, 'group')}><GripHorizontal size={20} className="text-zinc-600 rotate-45" /></div>
+                                </div>
+                            ))}
+
+                            {/* Edges */}
+                            <svg className="absolute top-0 left-0 overflow-visible w-1 h-1 pointer-events-none">
+                                {edges.map(e => {
+                                    const s = nodes.find(n => n.id === e.source); const t = nodes.find(n => n.id === e.target);
+                                    if(!s || !t) return null;
+                                    const sp = { x: s.x + (s.width||DEFAULT_NODE_WIDTH), y: s.y + 60 };
+                                    const tp = { x: t.x, y: t.y + 60 };
+                                    return <Wire key={e.id} start={sp} end={tp} status={s.completed ? 'active' : 'default'} />;
+                                })}
+                                {connecting && <Wire start={{x: connecting.x, y: connecting.y}} end={{x: connecting.curX, y: connecting.curY}} status="default" />}
+                            </svg>
+
+                            {/* Nodes */}
+                            {nodes.map(node => {
+                                const isSelected = selection === node.id;
+                                let color = COLORS.task;
+                                if(COLORS[node.type]) color = COLORS[node.type];
+
+                                return (
+                                    <div key={node.id} className="absolute flex flex-col rounded-xl shadow-xl border overflow-hidden node-shadow bg-[#18181b]"
+                                        style={{ left: node.x, top: node.y, width: node.width||DEFAULT_NODE_WIDTH, height: node.height||DEFAULT_NODE_HEIGHT, borderColor: isSelected ? COLORS.wireSelected : '#333', borderWidth: isSelected ? 2 : 1 }}
+                                        onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                                    >
+                                        {/* Header */}
+                                        <div className="px-3 py-2 text-xs font-bold text-white uppercase tracking-wider flex justify-between items-center shrink-0" 
+                                            style={{ background: `linear-gradient(90deg, ${color}cc, ${color}00)`, borderBottom: '1px solid #333' }}>
+                                            <span className="flex items-center gap-2">
+                                                {node.type === 'lecture' && <Presentation size={12} />}
+                                                {node.type === 'flashcard' && <Layers size={12} />}
+                                                {node.title}
+                                            </span>
+                                            <button onClick={(e) => { e.stopPropagation(); setNodes(p => p.filter(n => n.id !== node.id)); setEdges(p => p.filter(ed => ed.source !== node.id && ed.target !== node.id)); }} className="hover:text-red-400"><Trash2 size={12} /></button>
+                                        </div>
+
+                                        {/* Body */}
+                                        <div className="flex-1 flex flex-col p-3 relative overflow-hidden">
+                                            {/* Pins */}
+                                            <div className="absolute left-[-8px] top-2 w-4 h-4 bg-white rounded-full border-4 border-zinc-800 cursor-crosshair hover:scale-125 z-10" onMouseUp={(e) => handlePinUp(e, node.id)}></div>
+                                            <div className="absolute right-[-8px] top-2 w-4 h-4 border-4 border-zinc-800 rounded-full cursor-crosshair hover:scale-125 z-10" style={{backgroundColor: node.completed ? '#10b981' : '#52525b'}} onMouseDown={(e) => handlePinDown(e, node.id)}></div>
+
+                                            {/* Content */}
+                                            {node.type === 'flashcard' ? (
+                                                <div className="flex-1 flex flex-col items-center justify-center text-center cursor-pointer perspective-1000 group"
+                                                    onClick={(e) => { e.stopPropagation(); setNodes(p => p.map(n => n.id === node.id ? { ...n, data: { ...n.data, isFlipped: !n.data.isFlipped } } : n)); }}>
+                                                    <div className="text-sm font-medium text-zinc-200">
+                                                        {node.data.isFlipped ? (node.data.back || 'No Answer') : (node.data.front || 'No Question')}
+                                                    </div>
+                                                    <div className="mt-2 text-[10px] text-zinc-500 uppercase font-bold">{node.data.isFlipped ? 'Back' : 'Front'}</div>
+                                                </div>
+                                            ) : (
+                                                <textarea className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-zinc-300 placeholder-zinc-600" 
+                                                    value={node.data.label} 
+                                                    onChange={e => setNodes(p => p.map(n => n.id === node.id ? { ...n, data: { ...n.data, label: e.target.value } } : n))}
+                                                    placeholder="Content..."
+                                                    onMouseDown={e => e.stopPropagation()}
+                                                />
+                                            )}
+
+                                            {/* Attachments */}
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {node.data.attachments?.map(att => (
+                                                    <div key={att.id} className="bg-zinc-800 rounded px-1.5 py-0.5 text-[10px] flex items-center gap-1 border border-zinc-700 max-w-full">
+                                                        {att.fileType === 'image' ? <ImageIcon size={10} className="text-purple-400"/> : att.fileType === 'audio' ? <Music size={10} className="text-pink-400"/> : <FileText size={10} className="text-blue-400"/>}
+                                                        <span className="truncate max-w-[60px] cursor-pointer hover:underline" onClick={(e) => {e.stopPropagation(); if(att.url) window.open(att.url)}}>{att.name}</span>
+                                                        <X size={10} className="cursor-pointer hover:text-red-400" onClick={(e) => { e.stopPropagation(); setNodes(p => p.map(n => n.id===node.id ? {...n, data:{...n.data, attachments:n.data.attachments.filter(a=>a.id!==att.id)}} : n)); }} />
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Footer Controls */}
+                                            <div className="mt-2 pt-2 border-t border-zinc-800 flex gap-2 shrink-0">
+                                                <button onClick={(e) => {e.stopPropagation(); setAttachingNodeId(node.id); if(fileInputRef.current) fileInputRef.current.click();}} className="p-1 hover:bg-zinc-700 rounded text-zinc-400"><Paperclip size={12}/></button>
+                                                <button onClick={(e) => {e.stopPropagation(); setAiMenu({ id: node.id, x: e.clientX, y: e.clientY }); }} className="p-1 hover:bg-zinc-700 rounded text-indigo-400"><Sparkles size={12}/></button>
+                                                {node.type === 'flashcard' && <button onClick={(e)=>{e.stopPropagation(); const f=prompt("Front:"); const b=prompt("Back:"); if(f&&b) setNodes(p=>p.map(n=>n.id===node.id?{...n, data:{...n.data, front:f, back:b}}:n));}} className="p-1 hover:bg-zinc-700 rounded text-emerald-400"><FileText size={12}/></button>}
+                                                <div className="flex-1"></div>
+                                                <button onClick={(e) => { e.stopPropagation(); setNodes(p => p.map(n => n.id === node.id ? { ...n, completed: !n.completed } : n)); }} className={`p-1 rounded ${node.completed ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'}`}><CheckCircle size={14} /></button>
+                                                <div className="cursor-nwse-resize pl-2" onMouseDown={(e) => handleResizeMouseDown(e, node.id, 'node')}><GripHorizontal size={14} className="text-zinc-600 rotate-45" /></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Context Menu */}
+                    {contextMenu && (
+                        <div className="fixed bg-zinc-900 border border-zinc-700 shadow-2xl rounded-lg p-1 min-w-[160px] z-[60] flex flex-col gap-1 text-sm text-zinc-300 animate-in fade-in zoom-in duration-100" style={{ left: contextMenu.x, top: contextMenu.y }}>
+                            <div className="px-2 py-1 text-xs font-bold text-zinc-500 uppercase">Learning</div>
+                            <button onClick={() => { setNodes(p => [...p, { id: `n-${Date.now()}`, type: 'lecture', title: 'Lecture', x: contextMenu.vx, y: contextMenu.vy, width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT, completed: false, data: { label: '', attachments: [] } }]); setContextMenu(null); }} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded"><Presentation size={14} className="text-violet-500"/> Lecture</button>
+                            <button onClick={() => { setNodes(p => [...p, { id: `n-${Date.now()}`, type: 'concept', title: 'Concept', x: contextMenu.vx, y: contextMenu.vy, width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT, completed: false, data: { label: '', attachments: [] } }]); setContextMenu(null); }} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded"><Lightbulb size={14} className="text-cyan-500"/> Concept</button>
+                            <button onClick={() => { setNodes(p => [...p, { id: `n-${Date.now()}`, type: 'flashcard', title: 'Flashcard', x: contextMenu.vx, y: contextMenu.vy, width: DEFAULT_NODE_WIDTH, height: 160, completed: false, data: { front: 'Question?', back: 'Answer', isFlipped: false, attachments: [] } }]); setContextMenu(null); }} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded"><Layers size={14} className="text-emerald-500"/> Flashcard</button>
+                            <div className="h-px bg-zinc-800 my-1"></div>
+                            <div className="px-2 py-1 text-xs font-bold text-zinc-500 uppercase">Productivity</div>
+                            <button onClick={() => { setNodes(p => [...p, { id: `n-${Date.now()}`, type: 'task', title: 'Task', x: contextMenu.vx, y: contextMenu.vy, width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT, completed: false, data: { label: '', attachments: [] } }]); setContextMenu(null); }} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded"><CheckCircle size={14} className="text-blue-500"/> Task</button>
+                            <button onClick={() => { setGroups(p => [...p, { id: `g-${Date.now()}`, title: 'Group', x: contextMenu.vx, y: contextMenu.vy, width: 400, height: 300, color: COLORS.groupHeader }]); setContextMenu(null); }} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded"><BoxSelect size={14}/> Group</button>
+                        </div>
+                    )}
+
+                    {/* AI Menu */}
+                    {aiMenu && (
+                        <div className="fixed bg-zinc-900 border border-indigo-500/30 shadow-2xl rounded-lg p-1 min-w-[170px] z-[60] text-sm text-zinc-300" style={{ left: aiMenu.x + 10, top: aiMenu.y }}>
+                            <div className="px-2 py-1 text-xs font-bold text-indigo-400 uppercase flex items-center gap-2"><Sparkles size={12}/> AI Tools</div>
+                            <button onClick={() => runAIOperation('enhance', aiMenu.id)} className="flex items-center gap-2 w-full px-2 py-1.5 hover:bg-zinc-800 rounded text-left"><Zap size={14} className="text-amber-400"/> Improve Note</button>
+                            <button onClick={() => runAIOperation('quiz', aiMenu.id)} className="flex items-center gap-2 w-full px-2 py-1.5 hover:bg-zinc-800 rounded text-left"><HelpCircle size={14} className="text-rose-400"/> Generate Quiz</button>
+                            <button onClick={() => runAIOperation('flashcards', aiMenu.id)} className="flex items-center gap-2 w-full px-2 py-1.5 hover:bg-zinc-800 rounded text-left"><Layers size={14} className="text-emerald-400"/> Make Flashcards</button>
+                        </div>
+                    )}
+
+                    {/* Settings */}
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-sm">
+                            <div className="bg-zinc-900 border border-zinc-700 p-6 rounded-xl w-96 shadow-2xl">
+                                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Settings className="w-5 h-5" /> Settings</h2>
+                                <label className="block text-sm text-zinc-400 mb-2">Gemini API Key</label>
+                                <input type="password" className="w-full bg-zinc-800 border border-zinc-700 rounded p-2 text-sm outline-none focus:border-indigo-500 mb-4" placeholder="Leave empty for Demo Mode" value={apiKey} onChange={e => setApiKey(e.target.value)} />
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setShowSettings(false)} className="px-3 py-1.5 hover:bg-zinc-800 rounded text-sm">Cancel</button>
+                                    <button onClick={() => { localStorage.setItem(SETTINGS_KEY, apiKey); setShowSettings(false); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {loadingAI && <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-indigo-600 px-4 py-2 rounded-full text-sm font-medium shadow-lg z-[100] animate-pulse flex items-center gap-2"><Sparkles size={16}/> AI Working...</div>}
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<FlowDo />);
+    </script>
+</body>
+</html>

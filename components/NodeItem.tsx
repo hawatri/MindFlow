@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Node, NodeType, Attachment } from '../types';
-import { NODE_COLORS } from '../constants';
+import { NODE_COLORS, COLORS, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../constants';
 import { 
   Trash2, GripHorizontal, CheckCircle, Circle, RefreshCw, 
-  Sparkles, Paperclip, ImageIcon, FileText, Music, Play
+  Sparkles, Paperclip, ImageIcon, FileText, Music, Play,
+  Presentation, Layers, X
 } from 'lucide-react';
 
 interface NodeProps {
@@ -17,7 +18,7 @@ interface NodeProps {
   onConnectEnd: (e: React.MouseEvent, nodeId: string) => void;
   onResizeStart: (e: React.MouseEvent, nodeId: string) => void;
   onAttach: (nodeId: string) => void;
-  onAIAction: (nodeId: string, action: string) => void;
+  onAIAction: (nodeId: string, action: string, event?: React.MouseEvent) => void;
 }
 
 export const NodeItem: React.FC<NodeProps> = ({
@@ -25,7 +26,8 @@ export const NodeItem: React.FC<NodeProps> = ({
   onConnectStart, onConnectEnd, onResizeStart, onAttach, onAIAction
 }) => {
   const styles = NODE_COLORS[node.type];
-  const [isHovered, setIsHovered] = useState(false);
+  let color = COLORS.task;
+  if (COLORS[node.type as keyof typeof COLORS]) color = COLORS[node.type as keyof typeof COLORS];
 
   const handleFlip = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -38,31 +40,11 @@ export const NodeItem: React.FC<NodeProps> = ({
     switch (node.type) {
       case 'flashcard':
         return (
-          <div className="w-full h-full relative perspective-1000 group cursor-pointer" onClick={handleFlip}>
-            <div className={`w-full h-full relative transform-style-3d transition-all duration-500 ${node.data.isFlipped ? 'rotate-y-180' : ''}`}>
-              {/* Front */}
-              <div className="absolute inset-0 backface-hidden bg-zinc-900 flex flex-col items-center justify-center p-4 text-center border border-zinc-700 rounded-lg">
-                <span className="text-xs font-bold text-emerald-500 uppercase mb-2">Front</span>
-                <textarea 
-                  className="w-full h-full bg-transparent text-center resize-none outline-none text-zinc-200 placeholder-zinc-600"
-                  value={node.data.front}
-                  onChange={(e) => onUpdate(node.id, { data: { ...node.data, front: e.target.value } })}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Enter Question..."
-                />
-              </div>
-              {/* Back */}
-              <div className="absolute inset-0 backface-hidden rotate-y-180 bg-emerald-900/20 flex flex-col items-center justify-center p-4 text-center border border-emerald-500/30 rounded-lg">
-                <span className="text-xs font-bold text-emerald-500 uppercase mb-2">Back</span>
-                <textarea 
-                  className="w-full h-full bg-transparent text-center resize-none outline-none text-zinc-200 placeholder-zinc-400"
-                  value={node.data.back}
-                  onChange={(e) => onUpdate(node.id, { data: { ...node.data, back: e.target.value } })}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Enter Answer..."
-                />
-              </div>
+          <div className="flex-1 flex flex-col items-center justify-center text-center cursor-pointer perspective-1000 group" onClick={handleFlip}>
+            <div className="text-sm font-medium text-zinc-200">
+              {node.data.isFlipped ? (node.data.back || 'No Answer') : (node.data.front || 'No Question')}
             </div>
+            <div className="mt-2 text-[10px] text-zinc-500 uppercase font-bold">{node.data.isFlipped ? 'Back' : 'Front'}</div>
           </div>
         );
       case 'quiz':
@@ -96,10 +78,10 @@ export const NodeItem: React.FC<NodeProps> = ({
       default:
         return (
           <textarea
-            className="w-full h-full bg-transparent resize-none outline-none text-zinc-300 placeholder-zinc-600 text-sm leading-relaxed p-1 font-mono"
+            className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-zinc-300 placeholder-zinc-600"
             value={node.data.label}
             onChange={(e) => onUpdate(node.id, { data: { ...node.data, label: e.target.value } })}
-            placeholder="Type your notes here..."
+            placeholder="Content..."
             onMouseDown={(e) => e.stopPropagation()}
           />
         );
@@ -108,97 +90,60 @@ export const NodeItem: React.FC<NodeProps> = ({
 
   return (
     <div
-      className={`absolute flex flex-col rounded-xl overflow-hidden node-drag-shadow bg-[#18181b] transition-shadow duration-200`}
+      className="absolute flex flex-col rounded-xl shadow-xl border overflow-hidden node-shadow bg-[#18181b]"
       style={{
         left: node.x,
         top: node.y,
-        width: node.width,
-        height: node.height,
-        border: `1px solid ${isSelected ? styles.border : '#27272a'}`,
-        boxShadow: isSelected ? `0 0 0 2px ${styles.border}` : undefined,
+        width: node.width || DEFAULT_NODE_WIDTH,
+        height: node.height || DEFAULT_NODE_HEIGHT,
+        borderColor: isSelected ? COLORS.wireSelected : '#333',
+        borderWidth: isSelected ? 2 : 1
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onMouseDown={onMouseDown}
     >
       {/* Header */}
       <div 
-        className="h-9 px-3 flex items-center justify-between shrink-0 border-b border-zinc-800"
-        style={{ background: `linear-gradient(90deg, ${styles.bg}, transparent)` }}
+        className="px-3 py-2 text-xs font-bold text-white uppercase tracking-wider flex justify-between items-center shrink-0" 
+        style={{ background: `linear-gradient(90deg, ${color}cc, ${color}00)`, borderBottom: '1px solid #333' }}
       >
-        <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: styles.icon }} />
-            <input 
-                value={node.title}
-                onChange={(e) => onUpdate(node.id, { title: e.target.value })}
-                className="bg-transparent text-xs font-bold uppercase tracking-wider text-zinc-300 outline-none w-32"
-                onMouseDown={(e) => e.stopPropagation()}
-            />
-        </div>
-        <div className={`flex items-center gap-1 transition-opacity duration-200 ${isHovered || isSelected ? 'opacity-100' : 'opacity-0'}`}>
-            <button onClick={(e) => { e.stopPropagation(); onAIAction(node.id, 'enhance'); }} className="p-1 hover:bg-white/10 rounded text-indigo-400" title="Enhance with AI">
-                <Sparkles size={12} />
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} className="p-1 hover:bg-white/10 rounded text-red-400">
-                <Trash2 size={12} />
-            </button>
-        </div>
+        <span className="flex items-center gap-2">
+          {node.type === 'lecture' && <Presentation size={12} />}
+          {node.type === 'flashcard' && <Layers size={12} />}
+          {node.title}
+        </span>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} className="hover:text-red-400"><Trash2 size={12} /></button>
       </div>
 
       {/* Body */}
-      <div className="flex-1 relative p-3 overflow-hidden flex flex-col">
-        {/* Connection Points */}
-        <div 
-            className="absolute -left-3 top-10 w-6 h-6 rounded-full flex items-center justify-center cursor-crosshair z-20 group/pin"
-            onMouseUp={(e) => onConnectEnd(e, node.id)}
-        >
-             <div className="w-2.5 h-2.5 bg-zinc-500 rounded-full border-2 border-zinc-900 group-hover/pin:scale-125 group-hover/pin:bg-indigo-500 transition-transform"></div>
-        </div>
-        <div 
-            className="absolute -right-3 top-10 w-6 h-6 rounded-full flex items-center justify-center cursor-crosshair z-20 group/pin"
-            onMouseDown={(e) => onConnectStart(e, node.id)}
-        >
-             <div className={`w-2.5 h-2.5 rounded-full border-2 border-zinc-900 group-hover/pin:scale-125 transition-transform ${node.completed ? 'bg-emerald-500' : 'bg-zinc-500 hover:bg-indigo-500'}`}></div>
-        </div>
+      <div className="flex-1 flex flex-col p-3 relative overflow-hidden">
+        {/* Pins */}
+        <div className="absolute left-[-8px] top-2 w-4 h-4 bg-white rounded-full border-4 border-zinc-800 cursor-crosshair hover:scale-125 z-10" onMouseUp={(e) => onConnectEnd(e, node.id)}></div>
+        <div className="absolute right-[-8px] top-2 w-4 h-4 border-4 border-zinc-800 rounded-full cursor-crosshair hover:scale-125 z-10" style={{backgroundColor: node.completed ? '#10b981' : '#52525b'}} onMouseDown={(e) => onConnectStart(e, node.id)}></div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-hidden">
-            {renderContent()}
-        </div>
+        {/* Content */}
+        {renderContent()}
 
-        {/* Attachment Bar */}
-        {node.data.attachments.length > 0 && (
-            <div className="flex gap-1 overflow-x-auto py-2 border-t border-zinc-800/50 mt-1 scrollbar-hide">
-                {node.data.attachments.map(att => (
-                    <div key={att.id} className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded text-[10px] text-zinc-300 whitespace-nowrap border border-zinc-700">
-                        {att.type === 'image' ? <ImageIcon size={10} className="text-purple-400"/> : <FileText size={10} className="text-blue-400"/>}
-                        <span className="truncate max-w-[80px]">{att.name}</span>
-                    </div>
-                ))}
-            </div>
+        {/* Attachments */}
+        {node.data.attachments && node.data.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {node.data.attachments.map(att => (
+              <div key={att.id} className="bg-zinc-800 rounded px-1.5 py-0.5 text-[10px] flex items-center gap-1 border border-zinc-700 max-w-full">
+                {att.type === 'image' ? <ImageIcon size={10} className="text-purple-400"/> : att.type === 'audio' ? <Music size={10} className="text-pink-400"/> : <FileText size={10} className="text-blue-400"/>}
+                <span className="truncate max-w-[60px] cursor-pointer hover:underline" onClick={(e) => {e.stopPropagation(); if(att.data) window.open(att.data)}}>{att.name}</span>
+                <X size={10} className="cursor-pointer hover:text-red-400" onClick={(e) => { e.stopPropagation(); onUpdate(node.id, { data: {...node.data, attachments: node.data.attachments.filter(a=>a.id!==att.id)} }); }} />
+              </div>
+            ))}
+          </div>
         )}
 
-        {/* Footer */}
-        <div className={`pt-2 flex items-center justify-between border-t border-zinc-800/50 mt-1 transition-opacity duration-200 ${isHovered || isSelected ? 'opacity-100' : 'opacity-30'}`}>
-            <div className="flex gap-1">
-                <button onClick={(e) => { e.stopPropagation(); onAttach(node.id); }} className="p-1 hover:bg-zinc-700 rounded text-zinc-500 hover:text-zinc-300">
-                    <Paperclip size={12} />
-                </button>
-            </div>
-            <div className="flex items-center gap-2">
-                 <button 
-                    onClick={(e) => { e.stopPropagation(); onUpdate(node.id, { completed: !node.completed }); }}
-                    className={`transition-colors ${node.completed ? 'text-emerald-500' : 'text-zinc-600 hover:text-zinc-400'}`}
-                >
-                    {node.completed ? <CheckCircle size={14} /> : <Circle size={14} />}
-                </button>
-                <div 
-                    className="cursor-nwse-resize text-zinc-600 hover:text-zinc-400"
-                    onMouseDown={(e) => onResizeStart(e, node.id)}
-                >
-                    <GripHorizontal size={14} className="rotate-45" />
-                </div>
-            </div>
+        {/* Footer Controls */}
+        <div className="mt-2 pt-2 border-t border-zinc-800 flex gap-2 shrink-0">
+          <button onClick={(e) => {e.stopPropagation(); onAttach(node.id);}} className="p-1 hover:bg-zinc-700 rounded text-zinc-400"><Paperclip size={12}/></button>
+          <button onClick={(e) => {e.stopPropagation(); onAIAction(node.id, 'menu', e);}} className="p-1 hover:bg-zinc-700 rounded text-indigo-400"><Sparkles size={12}/></button>
+          {node.type === 'flashcard' && <button onClick={(e)=>{e.stopPropagation(); const f=prompt("Front:"); const b=prompt("Back:"); if(f&&b) onUpdate(node.id, {data:{...node.data, front:f, back:b}});}} className="p-1 hover:bg-zinc-700 rounded text-emerald-400"><FileText size={12}/></button>}
+          <div className="flex-1"></div>
+          <button onClick={(e) => { e.stopPropagation(); onUpdate(node.id, { completed: !node.completed }); }} className={`p-1 rounded ${node.completed ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'}`}><CheckCircle size={14} /></button>
+          <div className="cursor-nwse-resize pl-2" onMouseDown={(e) => onResizeStart(e, node.id)}><GripHorizontal size={14} className="text-zinc-600 rotate-45" /></div>
         </div>
       </div>
     </div>

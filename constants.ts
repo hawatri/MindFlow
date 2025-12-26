@@ -1,18 +1,34 @@
 import { NodeType } from './types';
 
-export const GRID_SIZE = 24;
-export const DEFAULT_NODE_WIDTH = 300;
-export const DEFAULT_NODE_HEIGHT = 200;
-export const DB_NAME = 'FlowDoDB_V2';
-export const SETTINGS_KEY = 'flowdo_settings_v2';
+export const GRID_SIZE = 20;
+export const DEFAULT_NODE_WIDTH = 280;
+export const DEFAULT_NODE_HEIGHT = 180;
+export const DB_NAME = 'FlowDoDB';
+export const SETTINGS_KEY = 'flowdo_settings';
 
 export const COLORS = {
-  bg: '#09090b', // Zinc 950
-  grid: '#27272a', // Zinc 800
-  selection: 'rgba(99, 102, 241, 0.1)', // Indigo with opacity
-  wire: '#52525b', // Zinc 600
-  wireActive: '#10b981', // Emerald 500
-  wireSelected: '#6366f1', // Indigo 500
+  bg: '#09090b',
+  grid: '#18181b',
+  nodeBg: '#18181b',
+  // Study Colors
+  lecture: '#7c3aed', // Violet
+  concept: '#0891b2', // Cyan
+  question: '#be123c', // Rose
+  summary: '#d97706', // Amber
+  flashcard: '#059669', // Emerald
+  // Productivity Colors
+  task: '#2563eb', // Blue
+  goal: '#db2777', // Pink
+  resource: '#4b5563', // Gray
+  note: '#eab308', // Yellow
+  groupHeader: 'rgba(255, 255, 255, 0.05)',
+  groupBg: 'rgba(0, 0, 0, 0.2)',
+  text: '#e4e4e7',
+  wire: '#52525b',
+  wireActive: '#10b981',
+  wireLocked: '#ef4444',
+  wireSelected: '#3b82f6',
+  selection: 'rgba(59, 130, 246, 0.2)'
 };
 
 export const NODE_COLORS: Record<NodeType, { border: string; bg: string; icon: string }> = {
@@ -27,15 +43,55 @@ export const INITIAL_NODES = [
   { 
     id: '1', 
     type: 'lecture' as NodeType, 
-    title: 'Welcome to FlowDo', 
+    title: 'Biology: Cell Structure', 
     x: 100, 
-    y: 100, 
-    width: 320, 
-    height: 180, 
+    y: 300, 
+    width: 280, 
+    height: 160, 
     completed: false, 
     data: { 
-      label: 'This is an infinite canvas for your thoughts.\n\n- Drag to move\n- Right-click to add nodes\n- Connect nodes by dragging from the dots', 
+      label: 'Topic: Mitochondria & Ribosomes\nSource: Chapter 4', 
       attachments: [] 
     } 
   },
+  { 
+    id: '2', 
+    type: 'concept' as NodeType, 
+    title: 'Mitochondria', 
+    x: 450, 
+    y: 150, 
+    width: 280, 
+    height: 180, 
+    completed: false, 
+    data: { 
+      label: 'The powerhouse of the cell. Responsible for cellular respiration and ATP production.', 
+      attachments: [] 
+    } 
+  },
+  { 
+    id: '3', 
+    type: 'flashcard' as NodeType, 
+    title: 'Flashcard: ATP', 
+    x: 450, 
+    y: 450, 
+    width: 260, 
+    height: 160, 
+    completed: false, 
+    data: { 
+      label: '', 
+      front: 'What does ATP stand for?', 
+      back: 'Adenosine Triphosphate - the energy currency of the cell.', 
+      isFlipped: false, 
+      attachments: [] 
+    } 
+  },
+];
+
+export const INITIAL_EDGES = [
+  { id: 'e1', source: '1', target: '2' },
+  { id: 'e2', source: '1', target: '3' },
+];
+
+export const INITIAL_GROUPS = [
+  { id: 'g1', title: 'Unit 1: The Cell', x: 50, y: 100, width: 800, height: 600, color: 'rgba(124, 58, 237, 0.1)' }
 ];
