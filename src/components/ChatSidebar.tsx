@@ -242,10 +242,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             )}
           </button>
         </div>
-        <p className="text-xs text-zinc-500 mt-2 flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+        <div className="text-xs text-zinc-500 mt-2 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"></span>
           {getVisibleNodes().length} node{getVisibleNodes().length !== 1 ? 's' : ''} visible
-        </p>
+        </div>
       </div>
     </div>
   );

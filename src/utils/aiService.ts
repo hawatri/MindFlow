@@ -117,12 +117,48 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
     }
 
     try {
-      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      // Clean the text - remove markdown code blocks and extra whitespace
+      let cleanText = text.trim();
+      // Remove markdown code blocks
+      cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+      // Try to extract JSON if it's wrapped in other text
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanText = jsonMatch[0];
+      }
+      
       const json = JSON.parse(cleanText);
-      return mode === 'flow' ? (json.steps || json) : json;
+      
+      if (mode === 'flow') {
+        // Handle different response formats
+        if (Array.isArray(json)) {
+          return json; // Already an array
+        } else if (json.steps && Array.isArray(json.steps)) {
+          return json.steps; // Object with steps array
+        } else if (json.step && Array.isArray(json.step)) {
+          return json.step; // Alternative key name
+        } else {
+          // Try to convert object to array if it has numeric keys
+          const keys = Object.keys(json);
+          if (keys.length > 0 && keys.every(k => !isNaN(Number(k)))) {
+            return keys.map(k => json[k]);
+          }
+          console.warn("Unexpected flow format:", json);
+          return [];
+        }
+      }
+      return json;
     } catch (e) {
-      console.warn("JSON parse error", e);
-      return mode === 'flow' ? [] : text.split('\n').filter(l => l.length > 0);
+      console.warn("JSON parse error", e, "Text:", text);
+      if (mode === 'flow') {
+        // Try to extract steps from text if JSON parsing fails
+        const lines = text.split('\n').filter(l => l.trim().length > 0);
+        if (lines.length > 0) {
+          console.warn("Failed to parse flow JSON, returning empty array");
+        }
+        return [];
+      }
+      return text.split('\n').filter(l => l.length > 0);
     }
   } catch (error) {
     console.error("AI Request Failed", error);

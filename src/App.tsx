@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare, Wand2, Maximize2 
+  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare, Wand2, Maximize2, Eye, EyeOff 
 } from 'lucide-react';
 
 // Components
@@ -191,7 +191,7 @@ function FlowDo() {
     }
   }, [setIsResizingNode, setIsResizingGroup, setDragStart, setSelection, setContextMenu]);
 
-  const handlePinMouseDown = useCallback((e: React.MouseEvent, nodeId: string, type: string) => {
+  const handlePinMouseDown = useCallback((e: React.MouseEvent, nodeId: string, _type: string) => {
     e.stopPropagation();
     if (e.button === 0) {
       const rect = (e.target as HTMLElement).getBoundingClientRect();
@@ -442,59 +442,99 @@ function FlowDo() {
   }, [nodes, apiKey, setAiMenu, setIsAiLoading, setNodes, setEdges]);
 
   const handleGenerateFlow = useCallback(async () => {
-    if (!topicInput.trim()) return;
+    if (!topicInput.trim()) {
+      alert('Please enter a topic');
+      return;
+    }
     
     setShowTopicModal(false);
     setIsAiLoading(true);
     
     try {
       const steps = await generateAIContent('flow', topicInput, apiKey);
-      if (Array.isArray(steps) && steps.length > 0) {
-        const newNodes: Node[] = [];
-        const newEdges: Edge[] = [];
-        const idMap: Record<number, string> = {};
-        const centerX = -viewport.x + 400;
-        const centerY = -viewport.y + 200;
+      console.log('Generated steps:', steps);
+      
+      if (!Array.isArray(steps)) {
+        console.error('Steps is not an array:', steps);
+        alert("AI returned an invalid format. Please try again.");
+        setIsAiLoading(false);
+        setTopicInput('');
+        return;
+      }
+      
+      if (steps.length === 0) {
+        alert("AI could not generate a valid plan. Please try a different topic.");
+        setIsAiLoading(false);
+        setTopicInput('');
+        return;
+      }
 
-        steps.forEach((step: any) => {
-          idMap[step.id] = `gen-${Date.now()}-${step.id}`;
+      const newNodes: Node[] = [];
+      const newEdges: Edge[] = [];
+      const idMap: Record<number | string, string> = {};
+      const timestamp = Date.now();
+      const centerX = -viewport.x + (window.innerWidth - (showChatSidebar ? 384 : 0)) / 2 / viewport.zoom;
+      const centerY = -viewport.y + window.innerHeight / 2 / viewport.zoom;
+
+      // First pass: create ID map
+      steps.forEach((step: any, index: number) => {
+        const stepId = step.id !== undefined ? step.id : index + 1;
+        idMap[stepId] = `gen-${timestamp}-${stepId}`;
+      });
+
+      // Second pass: create nodes
+      steps.forEach((step: any, index: number) => {
+        const stepId = step.id !== undefined ? step.id : index + 1;
+        const nodeId = idMap[stepId];
+        
+        if (!nodeId) {
+          console.warn('Missing node ID for step:', step);
+          return;
+        }
+
+        newNodes.push({
+          id: nodeId,
+          type: ['lecture', 'concept', 'question', 'summary', 'task'].includes(step.type) 
+            ? step.type 
+            : 'lecture',
+          title: step.title || `Step ${index + 1}`,
+          x: centerX - (DEFAULT_NODE_WIDTH / 2) + (index % 3 - 1) * (DEFAULT_NODE_WIDTH + 40),
+          y: centerY - ((steps.length - 1) * 200) / 2 + (index * 200),
+          width: DEFAULT_NODE_WIDTH,
+          height: DEFAULT_NODE_HEIGHT,
+          completed: false,
+          data: { label: step.description || step.content || '', attachments: [] }
         });
 
-        steps.forEach((step: any, index: number) => {
-          newNodes.push({
-            id: idMap[step.id],
-            type: ['lecture', 'concept', 'question', 'summary', 'task'].includes(step.type) 
-              ? step.type 
-              : 'lecture',
-            title: step.title || 'Step',
-            x: centerX + (index % 2 === 0 ? 0 : 50),
-            y: centerY + (index * 240),
-            width: DEFAULT_NODE_WIDTH,
-            height: DEFAULT_NODE_HEIGHT,
-            completed: false,
-            data: { label: step.description || '', attachments: [] }
+        // Create edges based on dependencies
+        if (step.dependsOn && Array.isArray(step.dependsOn)) {
+          step.dependsOn.forEach((depId: number | string) => {
+            const sourceId = idMap[depId];
+            if (sourceId && nodeId) {
+              newEdges.push({
+                id: `gen-e-${timestamp}-${depId}-${stepId}`,
+                source: sourceId,
+                target: nodeId
+              });
+            }
           });
+        }
+      });
 
-          if (step.dependsOn) {
-            step.dependsOn.forEach((depId: number) => {
-              if (idMap[depId]) {
-                newEdges.push({
-                  id: `gen-e-${Date.now()}-${depId}-${step.id}`,
-                  source: idMap[depId],
-                  target: idMap[step.id]
-                });
-              }
-            });
-          }
-        });
+      // Create a group to contain all the nodes
+      if (newNodes.length > 0) {
+        const minX = Math.min(...newNodes.map(n => n.x)) - 50;
+        const maxX = Math.max(...newNodes.map(n => n.x + n.width)) + 50;
+        const minY = Math.min(...newNodes.map(n => n.y)) - 80;
+        const maxY = Math.max(...newNodes.map(n => n.y + n.height)) + 50;
 
         const newGroup: Group = {
-          id: `g-gen-${Date.now()}`,
+          id: `g-gen-${timestamp}`,
           title: topicInput,
-          x: centerX - 50,
-          y: centerY - 80,
-          width: DEFAULT_NODE_WIDTH + 150,
-          height: (steps.length * 240) + 100,
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
           color: 'rgba(255, 255, 255, 0.1)'
         };
 
@@ -502,15 +542,16 @@ function FlowDo() {
         setEdges(prev => [...prev, ...newEdges]);
         setGroups(prev => [...prev, newGroup]);
       } else {
-        alert("AI could not generate a valid plan.");
+        alert("No nodes were created. Please try again.");
       }
     } catch (e) {
+      console.error('Flow generation error:', e);
       alert(`AI Flow Failed: ${(e as Error).message}`);
     } finally {
       setIsAiLoading(false);
       setTopicInput('');
     }
-  }, [topicInput, apiKey, viewport, setShowTopicModal, setIsAiLoading, setNodes, setEdges, setGroups, setTopicInput]);
+  }, [topicInput, apiKey, viewport, showChatSidebar, setShowTopicModal, setIsAiLoading, setNodes, setEdges, setGroups, setTopicInput]);
 
   // Chat handler
   const handleChatQuery = useCallback(async (query: string, visibleNodesContext: string): Promise<string> => {
@@ -680,8 +721,16 @@ function FlowDo() {
         <button 
           onClick={() => setShowTopicModal(true)} 
           className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
+          title="Generate a study plan from a topic"
         >
           <Sparkles size={14} /> Plan
+        </button>
+        <button 
+          onClick={() => setShowMinimap(!showMinimap)} 
+          className={`${showMinimap ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-800/50 hover:bg-zinc-700/50'} text-zinc-300 border border-zinc-700 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2`}
+          title={showMinimap ? "Hide minimap" : "Show minimap"}
+        >
+          {showMinimap ? <EyeOff size={14} /> : <Eye size={14} />} Minimap
         </button>
         <button 
           onClick={() => setShowSettings(true)} 
@@ -759,7 +808,7 @@ function FlowDo() {
                 />
               );
             })}
-            {connecting && connecting.currentX && (
+            {connecting && connecting.currentX !== undefined && connecting.currentY !== undefined && (
               <Wire
                 start={getPinPos(nodes.find(n => n.id === connecting.source)!, 'output')}
                 end={{ x: connecting.currentX, y: connecting.currentY }}
