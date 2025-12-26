@@ -48,7 +48,7 @@ export const NodeItem: React.FC<NodeProps> = ({
     switch (node.type) {
       case 'flashcard':
         return (
-          <div className="flex-1 flex flex-col items-center justify-center text-center cursor-pointer perspective-1000 group" onClick={handleFlip}>
+          <div className="flex-1 flex flex-col items-center justify-center text-center cursor-pointer perspective-1000 group" onClick={handleFlip} onMouseDown={(e) => e.stopPropagation()}>
             <div className="text-sm font-medium text-zinc-200">
               {node.data.isFlipped ? (node.data.back || 'No Answer') : (node.data.front || 'No Question')}
             </div>
@@ -116,6 +116,10 @@ export const NodeItem: React.FC<NodeProps> = ({
         transform: isSearchMatch ? 'scale(1.02)' : 'scale(1)',
       }}
       onMouseDown={onMouseDown}
+      onMouseUp={(e) => {
+        // Prevent any accidental drags from mouse up
+        e.stopPropagation();
+      }}
     >
       {/* Header */}
       <div 
@@ -151,7 +155,9 @@ export const NodeItem: React.FC<NodeProps> = ({
         </div>
 
         {/* Content */}
-        {renderContent()}
+        <div onMouseDown={(e) => e.stopPropagation()}>
+          {renderContent()}
+        </div>
 
         {/* Attachments */}
         {node.data.attachments && node.data.attachments.length > 0 && (

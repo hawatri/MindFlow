@@ -25,7 +25,7 @@ const Wire = ({ id, start, end, status = 'default', isSelected, onSelect, onCont
     isSelected?: boolean;
     onSelect?: (id: string) => void;
     onContextMenu?: (e: React.MouseEvent, id: string) => void;
-}) => {
+} & React.SVGProps<SVGPathElement>) => {
     const dist = Math.abs(end.x - start.x);
     const controlPointX = Math.max(dist * 0.5, 50);
     const path = `M ${start.x} ${start.y} C ${start.x + controlPointX} ${start.y}, ${end.x - controlPointX} ${end.y}, ${end.x} ${end.y}`;
@@ -231,12 +231,28 @@ export default function App() {
         // Don't start dragging if we're already connecting
         if (connecting) return;
         if (e.button === 0) {
-            // Check if click is on a pin (pins have z-10 class and are positioned outside)
+            // Check if click is on a pin, button, input, or other interactive element
             const target = e.target as HTMLElement;
-            if (target.closest('.group\\/pin') || target.closest('[title="Input"]') || target.closest('[title="Output"]')) {
-                return; // Don't drag if clicking on pin
+            if (target.closest('.group\\/pin') || 
+                target.closest('[title="Input"]') || 
+                target.closest('[title="Output"]') ||
+                target.tagName === 'BUTTON' ||
+                target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.closest('button') ||
+                target.closest('input') ||
+                target.closest('textarea')) {
+                return; // Don't drag if clicking on interactive elements
             }
-            dragStateRef.current = { type: 'node', id, startX: e.clientX, startY: e.clientY };
+            // Store initial position but don't start dragging yet - wait for movement threshold
+            dragStateRef.current = { 
+                type: 'node', 
+                id, 
+                startX: e.clientX, 
+                startY: e.clientY,
+                initialX: e.clientX,
+                initialY: e.clientY
+            };
             setSelection(id);
             setContextMenu(null);
         }
@@ -257,6 +273,22 @@ export default function App() {
 
         if (!ds) return;
 
+        // For node dragging, check if we've moved enough to start dragging (threshold)
+        if (ds.type === 'node' && ds.id && (ds as any).initialX !== undefined) {
+            const moveX = Math.abs(e.clientX - (ds as any).initialX);
+            const moveY = Math.abs(e.clientY - (ds as any).initialY);
+            const threshold = 8; // pixels - increased from 5 to reduce accidental drags
+            
+            // Only start dragging if moved beyond threshold
+            if (moveX < threshold && moveY < threshold) {
+                return; // Don't drag yet, wait for more movement
+            }
+            // Mark as actively dragging
+            if (!(ds as any).isDragging) {
+                (ds as any).isDragging = true;
+            }
+        }
+
         const dx = e.clientX - ds.startX;
         const dy = e.clientY - ds.startY;
         
@@ -264,7 +296,7 @@ export default function App() {
             setViewport(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
             ds.startX = e.clientX;
             ds.startY = e.clientY;
-        } else if (ds.type === 'node' && ds.id) {
+        } else if (ds.type === 'node' && ds.id && (ds as any).isDragging) {
             const scale = viewport.zoom;
             setNodes(prev => prev.map(n => n.id === ds.id ? { ...n, x: n.x + dx / scale, y: n.y + dy / scale } : n));
             ds.startX = e.clientX;
@@ -302,10 +334,23 @@ export default function App() {
     };
 
     const handleMouseUp = (e: React.MouseEvent) => {
-        // Only clear drag state if not connecting
-        if (!connecting) {
-            dragStateRef.current = null;
+        const ds = dragStateRef.current;
+        
+        // If we were dragging a node but didn't move much, it was just a click
+        if (ds && ds.type === 'node' && (ds as any).initialX !== undefined) {
+            const moveX = Math.abs(e.clientX - (ds as any).initialX);
+            const moveY = Math.abs(e.clientY - (ds as any).initialY);
+            const threshold = 8; // pixels - match the threshold used in mousemove
+            
+            // If we didn't move much, it was just a click - don't update position
+            if (moveX < threshold && moveY < threshold && !(ds as any).isDragging) {
+                // Just a click, don't do anything
+            }
         }
+        
+        // Always clear drag state on mouse up
+        dragStateRef.current = null;
+        
         // If connecting and mouse up on canvas (not on a pin), cancel connection
         if (connecting && e.target === canvasRef.current) {
             setConnecting(null);
@@ -601,7 +646,7 @@ export default function App() {
                             
                             return (
                                 <Wire 
-                                    key={edge.id} 
+                                    key={edge.id}
                                     id={edge.id} 
                                     start={start} 
                                     end={end} 
