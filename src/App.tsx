@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  GraduationCap, Settings, Download, Sparkles, Database 
+  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare 
 } from 'lucide-react';
 
 // Components
@@ -9,6 +9,7 @@ import { FlowNode } from './components/FlowNode';
 import { NodeGroup } from './components/NodeGroup';
 import { ContextMenuComponent, AIMenuComponent } from './components/ContextMenus';
 import { SettingsModal, TopicModal, LoadingOverlay } from './components/Modals';
+import { ChatSidebar } from './components/ChatSidebar';
 
 // Hooks
 import { useCanvasInteractions } from './hooks/useCanvasInteractions';
@@ -16,7 +17,7 @@ import { useCanvasInteractions } from './hooks/useCanvasInteractions';
 // Utils
 import { saveStateToDB, loadStateFromDB, clearDB } from './utils/database';
 import { fileToBase64, fileToText, downloadFlow } from './utils/fileHandlers';
-import { generateAIContent } from './utils/aiService';
+import { generateAIContent, generateChatResponse } from './utils/aiService';
 
 // Data
 import { initialNodes, initialEdges, initialGroups } from './data/initialData';
@@ -43,6 +44,7 @@ function FlowDo() {
   const [isDbReady, setIsDbReady] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showChatSidebar, setShowChatSidebar] = useState(false);
   const [topicInput, setTopicInput] = useState('');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(SETTINGS_KEY) || '');
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
@@ -503,6 +505,11 @@ function FlowDo() {
     }
   }, [topicInput, apiKey, viewport, setShowTopicModal, setIsAiLoading, setNodes, setEdges, setGroups, setTopicInput]);
 
+  // Chat handler
+  const handleChatQuery = useCallback(async (query: string, visibleNodesContext: string): Promise<string> => {
+    return await generateChatResponse(query, visibleNodesContext, apiKey);
+  }, [apiKey]);
+
   // Settings
   const saveSettings = useCallback(() => {
     localStorage.setItem(SETTINGS_KEY, apiKey);
@@ -571,6 +578,12 @@ function FlowDo() {
         }`}>
           {saveStatus === 'saving' ? 'Saving...' : (saveStatus === 'error' ? 'Error!' : 'Saved')}
         </div>
+        <button 
+          onClick={() => setShowChatSidebar(!showChatSidebar)} 
+          className={`${showChatSidebar ? 'bg-indigo-600/40 hover:bg-indigo-600/60' : 'bg-indigo-600/20 hover:bg-indigo-600/40'} text-indigo-300 border border-indigo-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2`}
+        >
+          <MessageSquare size={14} /> Chat
+        </button>
         <button 
           onClick={() => setShowTopicModal(true)} 
           className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/50 px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2"
@@ -705,6 +718,16 @@ function FlowDo() {
           onAIOperation={handleAIOperation}
         />
       )}
+
+      {/* Chat Sidebar */}
+      <ChatSidebar
+        isOpen={showChatSidebar}
+        onClose={() => setShowChatSidebar(false)}
+        nodes={nodes}
+        viewport={viewport}
+        apiKey={apiKey}
+        onChatQuery={handleChatQuery}
+      />
     </div>
   );
 }

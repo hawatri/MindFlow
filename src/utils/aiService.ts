@@ -84,3 +84,44 @@ export const generateAIContent = async (
     throw error; 
   }
 };
+
+export const generateChatResponse = async (
+  userQuery: string,
+  visibleNodesContext: string,
+  apiKey: string
+): Promise<string> => {
+  if (!apiKey || apiKey === 'demo') {
+    await new Promise(r => setTimeout(r, 1500));
+    return "Based on the visible nodes in your flow, I can see connections between different concepts. However, please set up your API key in Settings to get detailed responses about your specific content.";
+  }
+
+  try {
+    const systemPrompt = `You are an AI assistant helping a user understand their learning flow. You have access to the text content of all currently visible nodes on their canvas. Analyze the relationships, concepts, and content across these nodes to provide helpful, context-aware answers.
+
+Visible Nodes Context:
+${visibleNodesContext}
+
+User Question: ${userQuery}
+
+Please provide a clear, helpful answer based on the visible nodes' content. If the question relates to specific nodes, reference them by their titles or content. Be concise but thorough.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        contents: [{ 
+          parts: [{ text: systemPrompt }] 
+        }] 
+      })
+    });
+    
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || "Unknown API Error");
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again.";
+    return text;
+  } catch (error) {
+    console.error("Chat Request Failed", error);
+    throw error;
+  }
+};
