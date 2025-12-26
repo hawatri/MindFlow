@@ -47,3 +47,24 @@ export const downloadFlow = (nodes: any[], edges: any[], groups: any[], viewport
   a.click();
   URL.revokeObjectURL(url);
 };
+
+export const uploadFlow = (file: File): Promise<{ nodes: any[], edges: any[], groups: any[], viewport: any }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsText(file);
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result as string);
+        // Validate the structure
+        if (data.nodes && data.edges && data.groups && data.viewport) {
+          resolve(data);
+        } else {
+          reject(new Error('Invalid flow file format. Missing required properties.'));
+        }
+      } catch (error) {
+        reject(new Error('Failed to parse JSON file. Please ensure it is a valid flow file.'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file.'));
+  });
+};

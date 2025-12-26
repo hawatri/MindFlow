@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Toaster, toast } from 'react-hot-toast';
 import { 
-  GraduationCap, Settings, Download, Sparkles, Database, MessageSquare, Wand2, Maximize2, Eye, EyeOff 
+  GraduationCap, Settings, Download, Upload, Sparkles, Database, MessageSquare, Wand2, Maximize2, Eye, EyeOff 
 } from 'lucide-react';
 
 // Components
@@ -18,7 +19,7 @@ import { useCanvasInteractions } from './hooks/useCanvasInteractions';
 
 // Utils
 import { saveStateToDB, loadStateFromDB, clearDB } from './utils/database';
-import { fileToBase64, fileToText, pdfToText, downloadFlow } from './utils/fileHandlers';
+import { fileToBase64, fileToText, pdfToText, downloadFlow, uploadFlow } from './utils/fileHandlers';
 import { generateAIContent, generateChatResponse } from './utils/aiService';
 import { organizeNodesInViewport } from './utils/layout';
 
@@ -30,6 +31,33 @@ import { GRID_SIZE, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, SETTINGS_KEY, NODE_
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 3;
+
+// Toast style helpers
+const toastStyle = {
+  background: '#18181b',
+  color: '#f4f4f5',
+  border: '1px solid #3f3f46',
+};
+
+const toastError = (message: string) => {
+  toast.error(message, {
+    style: toastStyle,
+    iconTheme: {
+      primary: '#ef4444',
+      secondary: '#f4f4f5',
+    },
+  });
+};
+
+const toastSuccess = (message: string) => {
+  toast.success(message, {
+    style: toastStyle,
+    iconTheme: {
+      primary: '#a855f7',
+      secondary: '#f4f4f5',
+    },
+  });
+};
 
 // Types
 import type { 
@@ -68,6 +96,7 @@ function FlowDo() {
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const jsonUploadRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Canvas interactions hook
@@ -431,7 +460,7 @@ function FlowDo() {
           : n
       ));
     } catch (err) {
-      alert("File processing error");
+      toastError("File processing error");
     }
     setAttachingNodeId(null);
   }, [attachingNodeId, setNodes, setSaveStatus, setAttachingNodeId]);
@@ -493,11 +522,11 @@ function FlowDo() {
           setNodes(prev => [...prev, ...newNodes]);
           setEdges(prev => [...prev, ...newEdges]);
         } else {
-          alert("AI returned no suggestions.");
+          toastError("AI returned no suggestions.");
         }
       }
     } catch (e) {
-      alert(`AI Failed: ${(e as Error).message}`);
+      toastError(`AI Failed: ${(e as Error).message}`);
     } finally {
       setIsAiLoading(false);
     }
@@ -513,7 +542,7 @@ function FlowDo() {
       } else if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
         text = await fileToText(file);
       } else {
-        alert('Unsupported file type. Please upload a PDF or text file.');
+        toastError('Unsupported file type. Please upload a PDF or text file.');
         setIsAiLoading(false);
         return;
       }
@@ -522,7 +551,7 @@ function FlowDo() {
       setImportedFileName(file.name);
     } catch (error) {
       console.error('File import error:', error);
-      alert('Failed to import file. Please try again.');
+      toastError('Failed to import file. Please try again.');
       setIsAiLoading(false);
     } finally {
       setIsAiLoading(false);
@@ -531,7 +560,7 @@ function FlowDo() {
 
   const handleGenerateFlow = useCallback(async () => {
     if (!topicInput.trim() && !importedText) {
-      alert('Please enter a topic or upload a file');
+      toastError('Please enter a topic or upload a file');
       return;
     }
     
@@ -545,14 +574,14 @@ function FlowDo() {
       
       if (!Array.isArray(steps)) {
         console.error('Steps is not an array:', steps);
-        alert("AI returned an invalid format. Please try again.");
+        toastError("AI returned an invalid format. Please try again.");
         setIsAiLoading(false);
         setTopicInput('');
         return;
       }
       
       if (steps.length === 0) {
-        alert("AI could not generate a valid plan. Please try a different topic.");
+        toastError("AI could not generate a valid plan. Please try a different topic.");
         setIsAiLoading(false);
         setTopicInput('');
         return;
@@ -631,11 +660,11 @@ function FlowDo() {
         setEdges(prev => [...prev, ...newEdges]);
         setGroups(prev => [...prev, newGroup]);
       } else {
-        alert("No nodes were created. Please try again.");
+        toastError("No nodes were created. Please try again.");
       }
     } catch (e) {
       console.error('Flow generation error:', e);
-      alert(`AI Flow Failed: ${(e as Error).message}`);
+      toastError(`AI Flow Failed: ${(e as Error).message}`);
     } finally {
       setIsAiLoading(false);
       setTopicInput('');
@@ -660,7 +689,7 @@ function FlowDo() {
   // Magic Organize handler
   const handleMagicOrganize = useCallback(() => {
     if (nodes.length === 0) {
-      alert('No nodes to organize');
+      toastError('No nodes to organize');
       return;
     }
 
@@ -682,7 +711,7 @@ function FlowDo() {
   // Fit to View handler
   const handleFitToView = useCallback(() => {
     if (nodes.length === 0) {
-      alert('No nodes to fit');
+      toastError('No nodes to fit');
       return;
     }
 
@@ -725,7 +754,7 @@ function FlowDo() {
   const saveSettings = useCallback(() => {
     localStorage.setItem(SETTINGS_KEY, apiKey);
     setShowSettings(false);
-    alert("Saved!");
+    toastSuccess("Saved!");
   }, [apiKey, setShowSettings]);
 
   const handleReset = useCallback(async () => {
@@ -734,6 +763,40 @@ function FlowDo() {
       window.location.reload();
     }
   }, []);
+
+  const handleUploadFlow = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await uploadFlow(file);
+      
+      // Confirm before overwriting current data
+      if (nodes.length > 0 || edges.length > 0 || groups.length > 0) {
+        if (!window.confirm('This will replace your current flow. Continue?')) {
+          if (jsonUploadRef.current) {
+            jsonUploadRef.current.value = '';
+          }
+          return;
+        }
+      }
+
+      // Restore the state
+      setNodes(data.nodes);
+      setEdges(data.edges);
+      setGroups(data.groups);
+      setViewport(data.viewport);
+      
+      toastSuccess('Flow loaded successfully!');
+    } catch (error) {
+      toastError(`Failed to load flow: ${(error as Error).message}`);
+    } finally {
+      // Reset the input
+      if (jsonUploadRef.current) {
+        jsonUploadRef.current.value = '';
+      }
+    }
+  }, [nodes, edges, groups, setNodes, setEdges, setGroups, setViewport]);
 
   if (!isDbReady) {
     return (
@@ -745,10 +808,44 @@ function FlowDo() {
 
   return (
     <div className="w-full h-screen overflow-hidden bg-zinc-950 text-white font-sans select-none relative">
+      <Toaster
+        position="bottom-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#18181b',
+            color: '#f4f4f5',
+            border: '1px solid #3f3f46',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontFamily: 'inherit',
+          },
+          success: {
+            iconTheme: {
+              primary: '#a855f7',
+              secondary: '#f4f4f5',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#f4f4f5',
+            },
+          },
+        }}
+      />
       <input 
         type="file" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
+        className="hidden" 
+      />
+      <input 
+        type="file" 
+        ref={jsonUploadRef} 
+        accept=".json" 
+        onChange={handleUploadFlow} 
         className="hidden" 
       />
 
@@ -836,8 +933,16 @@ function FlowDo() {
           <Settings size={16} />
         </button>
         <button 
+          onClick={() => jsonUploadRef.current?.click()} 
+          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md text-xs font-medium border border-zinc-700 transition-colors"
+          title="Upload saved flow"
+        >
+          <Upload size={14} />
+        </button>
+        <button 
           onClick={() => downloadFlow(nodes, edges, groups, viewport)} 
           className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-md text-xs font-medium border border-zinc-700 transition-colors"
+          title="Download flow as JSON"
         >
           <Download size={14} />
         </button>
