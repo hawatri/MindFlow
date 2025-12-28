@@ -26,6 +26,26 @@ export const NodeGroup: React.FC<NodeGroupProps> = ({
     onUpdateGroup(group.id, { title: value });
   };
 
+  // Convert touch event to mouse event for compatibility
+  const createMouseEventFromTouch = (touchEvent: React.TouchEvent, type: 'mousedown' | 'mousemove' | 'mouseup'): React.MouseEvent => {
+    const touch = touchEvent.touches[0] || touchEvent.changedTouches[0];
+    return {
+      ...touchEvent,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      button: 0,
+      buttons: 1,
+      preventDefault: () => touchEvent.preventDefault(),
+      stopPropagation: () => touchEvent.stopPropagation(),
+    } as unknown as React.MouseEvent;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    const mouseEvent = createMouseEventFromTouch(e, 'mousedown');
+    onMouseDown(mouseEvent, group);
+  };
+
   return (
     <div 
       className="absolute border flex flex-col group/groupbox" 
@@ -37,9 +57,11 @@ export const NodeGroup: React.FC<NodeGroupProps> = ({
         backgroundColor: COLORS.groupBg, 
         borderColor: isSelected ? '#ffffff' : (group.pinned ? '#f59e0b' : 'rgba(255,255,255,0.1)'), 
         borderRadius: '16px', 
-        zIndex: 0 
+        zIndex: 0,
+        touchAction: 'none'
       }} 
       onMouseDown={(e) => onMouseDown(e, group)}
+      onTouchStart={handleTouchStart}
       onContextMenu={(e) => {
         if (onContextMenu) {
           e.stopPropagation();
@@ -75,6 +97,12 @@ export const NodeGroup: React.FC<NodeGroupProps> = ({
         <div 
           className="absolute bottom-2 right-2 w-6 h-6 cursor-nwse-resize flex items-center justify-center text-zinc-600 hover:text-white z-10" 
           onMouseDown={(e) => onResizeMouseDown(e, group.id)}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            const mouseEvent = createMouseEventFromTouch(e, 'mousedown');
+            onResizeMouseDown(mouseEvent, group.id);
+          }}
+          style={{ touchAction: 'none' }}
         >
           <GripHorizontal size={20} className="rotate-45" />
         </div>

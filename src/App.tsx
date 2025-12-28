@@ -212,7 +212,8 @@ function FlowDo() {
   // Event handlers
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (e.button === 0) {
+    // Allow both mouse (button === 0) and touch events (button may be undefined in converted events)
+    if (e.button === 0 || e.button === undefined) {
       const node = nodes.find(n => n.id === id);
       // Don't allow dragging if node is pinned
       if (node?.pinned) {
@@ -229,7 +230,8 @@ function FlowDo() {
 
   const handleGroupMouseDown = useCallback((e: React.MouseEvent, group: Group) => {
     e.stopPropagation();
-    if (e.button === 0) {
+    // Allow both mouse (button === 0) and touch events (button may be undefined in converted events)
+    if (e.button === 0 || e.button === undefined) {
       // Don't allow dragging if group is pinned
       if (group.pinned) {
         setSelection(group.id);
@@ -247,7 +249,8 @@ function FlowDo() {
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, id: string, type: 'node' | 'group') => {
     e.stopPropagation();
     e.preventDefault();
-    if (e.button === 0) {
+    // Allow both mouse (button === 0) and touch events (button may be undefined in converted events)
+    if (e.button === 0 || e.button === undefined) {
       // Don't allow resizing if pinned
       if (type === 'node') {
         const node = nodes.find(n => n.id === id);
@@ -272,7 +275,8 @@ function FlowDo() {
 
   const handlePinMouseDown = useCallback((e: React.MouseEvent, nodeId: string, _type: string) => {
     e.stopPropagation();
-    if (e.button === 0) {
+    // Allow both mouse (button === 0) and touch events (button may be undefined in converted events)
+    if (e.button === 0 || e.button === undefined) {
       const rect = (e.target as HTMLElement).getBoundingClientRect();
       setConnecting({
         source: nodeId,
@@ -1046,10 +1050,14 @@ function FlowDo() {
         onMouseUp={canvasInteractions.handleMouseUp}
         onWheel={canvasInteractions.handleWheel}
         onContextMenu={canvasInteractions.handleContextMenu}
+        onTouchStart={canvasInteractions.handleTouchStart}
+        onTouchMove={canvasInteractions.handleTouchMove}
+        onTouchEnd={canvasInteractions.handleTouchEnd}
         style={{
           backgroundSize: `${GRID_SIZE * viewport.zoom}px ${GRID_SIZE * viewport.zoom}px`,
           backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-          backgroundImage: `linear-gradient(#222222 1px, transparent 1px), linear-gradient(90deg, #222222 1px, transparent 1px)`
+          backgroundImage: `linear-gradient(#222222 1px, transparent 1px), linear-gradient(90deg, #222222 1px, transparent 1px)`,
+          touchAction: 'none'
         }}
       >
         <div 

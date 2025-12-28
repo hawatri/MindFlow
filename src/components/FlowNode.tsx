@@ -74,6 +74,26 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
     });
   };
 
+  // Convert touch event to mouse event for compatibility
+  const createMouseEventFromTouch = (touchEvent: React.TouchEvent, type: 'mousedown' | 'mousemove' | 'mouseup'): React.MouseEvent => {
+    const touch = touchEvent.touches[0] || touchEvent.changedTouches[0];
+    return {
+      ...touchEvent,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      button: 0,
+      buttons: 1,
+      preventDefault: () => touchEvent.preventDefault(),
+      stopPropagation: () => touchEvent.stopPropagation(),
+    } as unknown as React.MouseEvent;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    const mouseEvent = createMouseEventFromTouch(e, 'mousedown');
+    onMouseDown(mouseEvent, node.id);
+  };
+
   return (
     <div 
       className="absolute flex flex-col rounded-lg shadow-xl border overflow-hidden group transition-shadow duration-200" 
@@ -87,9 +107,11 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
         borderWidth: isSelected ? '2px' : '1px', 
         opacity: isLocked ? 0.6 : 1, 
         backdropFilter: 'blur(8px)', 
-        zIndex: 20 
+        zIndex: 20,
+        touchAction: 'none'
       }} 
       onMouseDown={(e) => onMouseDown(e, node.id)}
+      onTouchStart={handleTouchStart}
       onContextMenu={(e) => {
         if (onContextMenu) {
           e.stopPropagation();
@@ -134,6 +156,13 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
             title="Input" 
             onMouseDown={(e) => e.stopPropagation()} 
             onMouseUp={(e) => onPinMouseUp(e, node.id, 'input')}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              const mouseEvent = createMouseEventFromTouch(e, 'mouseup');
+              onPinMouseUp(mouseEvent, node.id, 'input');
+            }}
+            style={{ touchAction: 'none' }}
           >
             <div className="w-4 h-4 rounded-full bg-white border-2 border-zinc-800 group-hover/pin:scale-150 transition-transform shadow-sm"></div>
           </div>
@@ -145,6 +174,12 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
             className="absolute right-[-21px] top-2 p-3 cursor-crosshair z-10 group/pin" 
             title="Output" 
             onMouseDown={(e) => onPinMouseDown(e, node.id, 'output')}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const mouseEvent = createMouseEventFromTouch(e, 'mousedown');
+              onPinMouseDown(mouseEvent, node.id, 'output');
+            }}
+            style={{ touchAction: 'none' }}
           >
             <div 
               className="w-4 h-4 rounded-full border-2 border-zinc-800 group-hover/pin:scale-150 transition-transform shadow-sm" 
@@ -284,6 +319,12 @@ export const FlowNode: React.FC<FlowNodeProps> = ({
           <div 
             className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center text-zinc-600 hover:text-zinc-400 z-20" 
             onMouseDown={(e) => onResizeMouseDown(e, node.id)}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const mouseEvent = createMouseEventFromTouch(e, 'mousedown');
+              onResizeMouseDown(mouseEvent, node.id);
+            }}
+            style={{ touchAction: 'none' }}
           >
             <GripHorizontal size={14} className="rotate-45" />
           </div>
