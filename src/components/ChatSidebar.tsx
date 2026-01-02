@@ -127,7 +127,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         content: response,
         timestamp: Date.now()
       };
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       const errorMessage: ChatMessage = {
